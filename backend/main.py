@@ -369,17 +369,25 @@ def _run_full_pipeline(evaluation_id: str):
             progress_callback=fetch_progress,
         )
 
-        # Persist dataset records
+        # Persist dataset records — handle both old and new field names
         db2 = SessionLocal()
         try:
             for ds in datasets:
+                if not ds:
+                    continue
+                # New service returns dataset_url/size_bytes/sample_count
+                # Old service returned url/size_mb/samples — support both
+                url        = ds.get("dataset_url") or ds.get("url", "")
+                size_bytes = ds.get("size_bytes") or int(ds.get("size_mb", 0) * 1024 * 1024)
+                samples    = ds.get("sample_count") or ds.get("samples", 0)
+                name       = ds.get("name", "")
                 record = DatasetRecord(
                     evaluation_id=evaluation_id,
                     source=ds.get("source", "unknown"),
-                    dataset_name=ds.get("name"),
-                    dataset_url=ds.get("url"),
-                    size_bytes=int(ds.get("size_mb", 0) * 1024 * 1024),
-                    sample_count=ds.get("samples"),
+                    dataset_name=name,
+                    dataset_url=url,
+                    size_bytes=int(size_bytes),
+                    sample_count=int(samples),
                     target_stressor=ds.get("target_stressor"),
                     description=ds.get("description"),
                 )
@@ -388,7 +396,9 @@ def _run_full_pipeline(evaluation_id: str):
         finally:
             db2.close()
 
-        total_samples = sum(ds.get("samples", 0) for ds in datasets)
+        total_samples = sum(
+            (ds.get("sample_count") or ds.get("samples", 0)) for ds in datasets if ds
+        )
         _update_eval(
             evaluation_id,
             progress=50,
@@ -572,6 +582,124 @@ def brainstorm_edge_cases(evaluation_id: str, db: Session = Depends(get_db)):
     ev = _get_eval_or_404(evaluation_id, db)
     scenarios = gemini_service.generate_edge_cases(ev.name, ev.description or "")
     return {"scenarios": scenarios}
+
+
+# ─── Dataset direct download ──────────────────────────────────────────────────
+
+@app.get("/api/evaluations/{evaluation_id}/datasets/{dataset_id}/download")
+def download_dataset(evaluation_id: str, dataset_id: str, db: Session = Depends(get_db)):
+    """
+    Stream a generated synthetic dataset ZIP directly.
+    Bypasses the static file server — works for any path under DATA_DIR.
+    """
+    from models import DatasetRecord as DR
+    record = db.query(DR).filter(
+        DR.id == dataset_id,
+        DR.evaluation_id == evaluation_id,
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Dataset record not found")
+
+    if not record.dataset_url:
+        raise HTTPException(status_code=404, detail="No download URL for this dataset")
+
+    # Resolve local path from URL
+    url = record.dataset_url
+    if url.startswith("http://localhost:8000/media/"):
+        rel = url.replace("http://localhost:8000/media/", "")
+        local_path = os.path.join(DATA_DIR, rel.replace("/", os.sep))
+    elif os.path.exists(url):
+        local_path = url
+    else:
+        # It's an external URL — redirect
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+
+    if not os.path.exists(local_path):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset file not found on disk. Re-run the evaluation to regenerate."
+        )
+
+    filename = os.path.basename(local_path)
+    file_size = os.path.getsize(local_path)
+
+    def iter_file():
+        with open(local_path, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+
+    return StreamingResponse(
+        iter_file(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Length": str(file_size),
+        },
+    )
+
+
+@app.post("/api/evaluations/{evaluation_id}/regenerate-datasets")
+def regenerate_datasets(
+    evaluation_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Re-generate synthetic datasets for an existing completed evaluation.
+    Useful when the old evaluation used the legacy service with fake URLs.
+    """
+    ev = _get_eval_or_404(evaluation_id, db)
+
+    def _regen(eid: str):
+        from models import SessionLocal as SL, DatasetRecord as DR
+        from services.dataset_fetch_service import fetch_datasets
+
+        db_r = SL()
+        try:
+            ev_r = db_r.query(ModelEvaluation).filter(ModelEvaluation.id == eid).first()
+            if not ev_r or not ev_r.vulnerability_vector:
+                return
+
+            dataset_type = ev_r.dataset_type or "image"
+            vuln_vec = ev_r.vulnerability_vector or {}
+
+            # Delete old dataset records
+            db_r.query(DR).filter(DR.evaluation_id == eid).delete()
+            db_r.commit()
+
+            datasets = fetch_datasets(
+                evaluation_id=eid,
+                dataset_type=dataset_type,
+                vulnerability_vector=vuln_vec,
+            )
+
+            for ds in datasets:
+                if not ds:
+                    continue
+                url        = ds.get("dataset_url") or ds.get("url", "")
+                size_bytes = ds.get("size_bytes") or int(ds.get("size_mb", 0) * 1024 * 1024)
+                samples    = ds.get("sample_count") or ds.get("samples", 0)
+                record = DR(
+                    evaluation_id=eid,
+                    source=ds.get("source", "unknown"),
+                    dataset_name=ds.get("name", ""),
+                    dataset_url=url,
+                    size_bytes=int(size_bytes),
+                    sample_count=int(samples),
+                    target_stressor=ds.get("target_stressor"),
+                    description=ds.get("description"),
+                )
+                db_r.add(record)
+            db_r.commit()
+            logger.info(f"[Regen] Datasets regenerated for {eid}: {len(datasets)} records")
+        except Exception as e:
+            logger.error(f"[Regen] Failed for {eid}: {e}")
+        finally:
+            db_r.close()
+
+    background_tasks.add_task(_regen, evaluation_id)
+    return {"message": "Dataset regeneration started", "evaluation_id": evaluation_id}
 
 
 # ─── Stressors reference ──────────────────────────────────────────────────────
