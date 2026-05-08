@@ -1,50 +1,70 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Bell, Settings, Cpu } from "lucide-react";
+import { Bell, Settings } from "lucide-react";
 
 interface TopNavBarProps { evaluationId?: string; projectId?: string; }
 
 export default function TopNavBar({ evaluationId, projectId }: TopNavBarProps) {
-  const id = evaluationId || projectId;
-  const location = useLocation();
-  const path = location.pathname;
+  const id   = evaluationId || projectId;
+  const path = useLocation().pathname;
 
   const navItems = [
-    { label: "Dashboard",    href: "/evaluations",                                    active: path === "/evaluations" },
-    { label: "Analysis",     href: id ? `/evaluations/${id}` : null,                  active: id ? path === `/evaluations/${id}` : false },
-    { label: "Stress Test",  href: id ? `/evaluations/${id}/stress` : null,           active: id ? path.includes("/stress") : false },
-    { label: "Datasets",     href: id ? `/evaluations/${id}/datasets` : null,         active: id ? path.includes("/datasets") : false },
-    { label: "Report",       href: id ? `/evaluations/${id}/report` : null,           active: id ? path.includes("/report") : false },
+    { label: "Dashboard",   href: "/evaluations",                           active: path === "/evaluations" },
+    { label: "Analysis",    href: id ? `/evaluations/${id}` : null,         active: id ? path === `/evaluations/${id}` : false },
+    { label: "Stress Test", href: id ? `/evaluations/${id}/stress` : null,  active: id ? path.includes("/stress") : false },
+    { label: "Datasets",    href: id ? `/evaluations/${id}/datasets` : null,active: id ? path.includes("/datasets") : false },
+    { label: "Report",      href: id ? `/evaluations/${id}/report` : null,  active: id ? path.includes("/report") : false },
   ];
 
   return (
-    <header className="fixed top-0 left-64 right-0 z-40 h-16 bg-[#080b10]/80 backdrop-blur-md border-b border-white/[0.06] flex items-center px-6 gap-6">
-      <div className="flex items-center gap-2 mr-4">
-        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Live</span>
+    <header style={{
+      position: "fixed", top: 0, left: "256px", right: 0, zIndex: 40,
+      height: "64px", background: "#000000", borderBottom: "2px solid #facc15",
+      display: "flex", alignItems: "center", padding: "0 24px", gap: "24px",
+      fontFamily: "'Google Sans', sans-serif",
+    }}>
+      {/* Live indicator */}
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginRight: "8px" }}>
+        <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10b981" }} />
+        <span style={{ fontSize: "13px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.2em", fontFamily: "'JetBrains Mono', monospace" }}>
+          Live
+        </span>
       </div>
-      <nav className="flex items-center gap-1 flex-1">
+
+      {/* Nav links */}
+      <nav style={{ display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
         {navItems.map(item =>
           item.href ? (
-            <Link key={item.label} to={item.href}
-              className={`px-3 py-1.5 rounded-md text-xs font-mono font-medium transition-all ${
-                item.active
-                  ? "bg-blue-600/20 text-blue-300 border border-blue-500/30"
-                  : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"
-              }`}>
+            <Link
+              key={item.label}
+              to={item.href}
+              style={{
+                padding: "6px 14px", borderRadius: "6px", textDecoration: "none",
+                fontSize: "14px", fontWeight: 600, transition: "all 150ms",
+                background: item.active ? "#facc15" : "transparent",
+                color: item.active ? "#000" : "#cbd5e1",
+                border: item.active ? "none" : "1px solid transparent",
+              }}
+              onMouseEnter={e => { if (!item.active) { (e.currentTarget as HTMLAnchorElement).style.color = "#fff"; (e.currentTarget as HTMLAnchorElement).style.background = "#111"; } }}
+              onMouseLeave={e => { if (!item.active) { (e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1"; (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; } }}
+            >
               {item.label}
             </Link>
           ) : (
-            <span key={item.label}
-              className="px-3 py-1.5 rounded-md text-xs font-mono text-slate-700 cursor-not-allowed">
+            <span
+              key={item.label}
+              style={{ padding: "6px 14px", fontSize: "14px", color: "#64748b", cursor: "not-allowed" }}
+            >
               {item.label}
             </span>
           )
         )}
       </nav>
-      <div className="flex items-center gap-3 text-slate-500">
-        <Bell size={16} className="cursor-pointer hover:text-slate-300 transition-colors" />
-        <Settings size={16} className="cursor-pointer hover:text-slate-300 transition-colors" />
+
+      {/* Right icons */}
+      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <Bell size={16} style={{ color: "#94a3b8", cursor: "pointer" }} />
+        <Settings size={16} style={{ color: "#94a3b8", cursor: "pointer" }} />
       </div>
     </header>
   );

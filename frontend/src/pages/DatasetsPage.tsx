@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Database, ExternalLink, ArrowLeft, Loader2, Download, Sparkles, BookOpen, RefreshCw } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import TopNavBar from "../components/TopNavBar";
-import { MetricCard, Card, Button } from "../components/ui";
+import { MetricCard, Card, Button, C, FONT, MONO } from "../components/ui";
 import { useEvaluation, useEvaluations } from "../hooks/useProject";
 import { api } from "../api/client";
 
@@ -110,10 +110,10 @@ export default function DatasetsPage() {
           <>
             {/* Stats */}
             <div className="grid grid-cols-4 gap-4 mb-8">
-              <MetricCard label="Generated Datasets" value={generated.length}                  color="emerald" />
-              <MetricCard label="Generated Samples"  value={totalGenSamples.toLocaleString()}  color="blue"    />
-              <MetricCard label="Generated Size"     value={totalGenSizeMB.toFixed(1) + " MB"} color="violet"  />
-              <MetricCard label="Real Suggestions"   value={suggestions.length}                color="amber"   />
+              <MetricCard label="Generated Datasets" value={generated.length}                  color="green"  />
+              <MetricCard label="Generated Samples"  value={totalGenSamples.toLocaleString()}  color="blue"   />
+              <MetricCard label="Generated Size"     value={totalGenSizeMB.toFixed(1) + " MB"} color="purple" />
+              <MetricCard label="Real Suggestions"   value={suggestions.length}                color="yellow" />
             </div>
 
             {/* Generated Synthetic Datasets */}

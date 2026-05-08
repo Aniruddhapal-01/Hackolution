@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Plus, LayoutDashboard, Cpu, ChevronRight, Trash2, Activity } from "lucide-react";
-import { Evaluation, STATUS_COLORS, ACTIVE_STATUSES } from "../api/client";
+import { Plus, LayoutDashboard, Cpu, Trash2 } from "lucide-react";
+import { Evaluation, ACTIVE_STATUSES } from "../api/client";
 
 interface SidebarProps {
   evaluations?: Evaluation[];
@@ -10,91 +10,155 @@ interface SidebarProps {
   onDelete?: (id: string) => void;
 }
 
+const DOT: Record<string, string> = {
+  active:  "#facc15",
+  ready:   "#10b981",
+  failed:  "#ef4444",
+  default: "#94a3b8",
+};
+
 export default function Sidebar({ evaluations = [], activeId, onNew, onDelete }: SidebarProps) {
-  const navigate  = useNavigate();
-  const location  = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-[#080b10] border-r border-white/[0.06] z-50 flex flex-col">
+    <aside style={{
+      position: "fixed", left: 0, top: 0, height: "100%", width: "256px",
+      background: "#000000", borderRight: "2px solid #facc15",
+      zIndex: 50, display: "flex", flexDirection: "column",
+      fontFamily: "'Google Sans', sans-serif",
+    }}>
+
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-white/[0.06] cursor-pointer" onClick={() => navigate("/")}>
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
-            <Cpu size={14} className="text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-white leading-none">BlindSpot.AI</p>
-            <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest mt-0.5">Robustness Platform</p>
-          </div>
+      <div
+        onClick={() => navigate("/")}
+        style={{
+          padding: "20px", borderBottom: "1px solid #1a1a1a",
+          cursor: "pointer", display: "flex", alignItems: "center", gap: "10px",
+        }}
+      >
+        <div style={{
+          width: "32px", height: "32px", background: "#facc15",
+          borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <Cpu size={16} color="#000" />
+        </div>
+        <div>
+          <p style={{ fontSize: "14px", fontWeight: 700, color: "#fff", lineHeight: 1 }}>BlindSpot.AI</p>
+          <p style={{ fontSize: "13px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.15em", marginTop: "3px", fontFamily: "'JetBrains Mono', monospace" }}>
+            Robustness Platform
+          </p>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="px-3 py-4 border-b border-white/[0.06]">
-        <button onClick={() => navigate("/evaluations")}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            location.pathname === "/evaluations"
-              ? "bg-blue-600/15 text-blue-300 border border-blue-500/20"
-              : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"
-          }`}>
+      {/* Dashboard nav */}
+      <nav style={{ padding: "12px", borderBottom: "1px solid #1a1a1a" }}>
+        <button
+          onClick={() => navigate("/evaluations")}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: "10px",
+            padding: "8px 12px", borderRadius: "8px", border: "none", cursor: "pointer",
+            fontSize: "13px", fontWeight: 600, fontFamily: "'Google Sans', sans-serif",
+            background: location.pathname === "/evaluations" ? "#facc15" : "transparent",
+            color: location.pathname === "/evaluations" ? "#000" : "#cbd5e1",
+            transition: "all 150ms",
+          }}
+          onMouseEnter={e => { if (location.pathname !== "/evaluations") (e.currentTarget as HTMLButtonElement).style.color = "#fff"; }}
+          onMouseLeave={e => { if (location.pathname !== "/evaluations") (e.currentTarget as HTMLButtonElement).style.color = "#cbd5e1"; }}
+        >
           <LayoutDashboard size={15} />
           Dashboard
         </button>
       </nav>
 
       {/* New Evaluation */}
-      <div className="px-3 py-3 border-b border-white/[0.06]">
-        <button onClick={onNew}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono font-semibold text-blue-400 border border-blue-500/20 bg-blue-600/10 hover:bg-blue-600/20 transition-all">
+      <div style={{ padding: "12px", borderBottom: "1px solid #1a1a1a" }}>
+        <button
+          onClick={onNew}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+            padding: "8px 12px", borderRadius: "8px", cursor: "pointer",
+            fontSize: "14px", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace",
+            background: "#facc15", color: "#000", border: "none",
+            transition: "opacity 150ms",
+          }}
+          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "0.85"}
+          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+        >
           <Plus size={14} /> New Evaluation
         </button>
       </div>
 
       {/* Evaluations list */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
-        <p className="text-[9px] font-mono text-slate-600 uppercase tracking-widest px-2 mb-2">Recent Evaluations</p>
-        <div className="space-y-1">
-          {evaluations.map(ev => {
-            const isActive = ACTIVE_STATUSES.includes(ev.status as any);
-            const isCurrent = ev.id === activeId;
-            return (
-              <div key={ev.id}
-                onClick={() => navigate(`/evaluations/${ev.id}`)}
-                className={`group flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer transition-all ${
-                  isCurrent
-                    ? "bg-white/[0.07] border border-white/[0.1]"
-                    : "hover:bg-white/[0.04]"
-                }`}>
-                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                  isActive ? "bg-blue-400 animate-pulse" :
-                  ev.status === "ready" ? "bg-emerald-500" :
-                  ev.status === "failed" ? "bg-red-500" : "bg-slate-600"
-                }`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-slate-300 truncate">{ev.name}</p>
-                  <p className="text-[9px] font-mono text-slate-600 truncate capitalize">{ev.status.replace("_"," ")}</p>
-                </div>
-                {onDelete && (
-                  <button onClick={e => { e.stopPropagation(); onDelete(ev.id); }}
-                    className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all">
-                    <Trash2 size={11} />
-                  </button>
-                )}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px" }}>
+        <p style={{
+          fontSize: "13px", color: "#94a3b8", textTransform: "uppercase",
+          letterSpacing: "0.2em", padding: "0 8px", marginBottom: "8px",
+          fontFamily: "'JetBrains Mono', monospace",
+        }}>
+          Recent Evaluations
+        </p>
+
+        {evaluations.map(ev => {
+          const isActive  = ACTIVE_STATUSES.includes(ev.status as any);
+          const isCurrent = ev.id === activeId;
+          const dotColor  = isActive ? DOT.active : ev.status === "ready" ? DOT.ready : ev.status === "failed" ? DOT.failed : DOT.default;
+
+          return (
+            <div
+              key={ev.id}
+              onClick={() => navigate(`/evaluations/${ev.id}`)}
+              style={{
+                display: "flex", alignItems: "center", gap: "10px",
+                padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
+                marginBottom: "2px",
+                background: isCurrent ? "#111111" : "transparent",
+                border: isCurrent ? "1px solid #facc15" : "1px solid transparent",
+                transition: "all 150ms",
+              }}
+              className="group"
+            >
+              <div style={{
+                width: "7px", height: "7px", borderRadius: "50%",
+                background: dotColor, flexShrink: 0,
+                animation: isActive ? "pulse 2s infinite" : "none",
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: "14px", fontWeight: 600, color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {ev.name}
+                </p>
+                <p style={{ fontSize: "13px", color: "#94a3b8", textTransform: "capitalize", fontFamily: "'JetBrains Mono', monospace", marginTop: "2px" }}>
+                  {ev.status.replace(/_/g, " ")}
+                </p>
               </div>
-            );
-          })}
-          {evaluations.length === 0 && (
-            <p className="text-[10px] font-mono text-slate-700 px-2 py-4 text-center">No evaluations yet</p>
-          )}
-        </div>
+              {onDelete && (
+                <button
+                  onClick={e => { e.stopPropagation(); onDelete(ev.id); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "2px", opacity: 0, transition: "opacity 150ms" }}
+                  className="group-hover:opacity-100"
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#ef4444"; (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "#94a3b8"; (e.currentTarget as HTMLButtonElement).style.opacity = "0"; }}
+                >
+                  <Trash2 size={11} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+
+        {evaluations.length === 0 && (
+          <p style={{ fontSize: "13px", color: "#64748b", textAlign: "center", padding: "16px 8px", fontFamily: "'JetBrains Mono', monospace" }}>
+            No evaluations yet
+          </p>
+        )}
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-white/[0.06]">
-        <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[9px] font-mono text-slate-600 uppercase tracking-widest">API Connected</span>
-        </div>
+      <div style={{ padding: "16px", borderTop: "1px solid #1a1a1a", display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10b981" }} />
+        <span style={{ fontSize: "13px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: "'JetBrains Mono', monospace" }}>
+          API Connected
+        </span>
       </div>
     </aside>
   );

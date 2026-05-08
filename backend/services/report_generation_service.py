@@ -44,22 +44,28 @@ def _build_report_dict(evaluation_id: str, d: Dict[str, Any]) -> Dict[str, Any]:
     metrics = d.get("original_metrics") or {}
     weakness= d.get("weakness_report") or {}
     score   = float(d.get("robustness_score") or 0)
+
+    # Sanitize name — replace unicode dashes/special chars with ASCII equivalents
+    def _safe(s):
+        if not s: return ""
+        return str(s).replace("\u2014","--").replace("\u2013","-").replace("\u2019","'").replace("\u201c",'"').replace("\u201d",'"')
+
     return {
         "report_id":    f"BSR-{evaluation_id[:8].upper()}",
         "generated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
         "platform":     "BlindSpot.AI v2.0",
         "model": {
-            "name":         d.get("name","Unnamed"),
-            "architecture": d.get("architecture","Unknown"),
-            "framework":    d.get("framework","Unknown"),
-            "dataset_type": d.get("dataset_type","Unknown"),
-            "model_file":   d.get("model_filename","N/A"),
+            "name":         _safe(d.get("name","Unnamed")),
+            "architecture": _safe(d.get("architecture","Unknown")),
+            "framework":    _safe(d.get("framework","Unknown")),
+            "dataset_type": _safe(d.get("dataset_type","Unknown")),
+            "model_file":   _safe(d.get("model_filename","N/A")),
             "metrics": {k: v for k, v in metrics.items() if v is not None},
         },
         "scope": {
-            "task_type":  d.get("detected_task_type","Unknown"),
-            "domain":     d.get("domain","Unknown"),
-            "summary":    d.get("scope_summary",""),
+            "task_type":  _safe(d.get("detected_task_type","Unknown")),
+            "domain":     _safe(d.get("domain","Unknown")),
+            "summary":    _safe(d.get("scope_summary","")),
         },
         "edge_cases": {
             "total":    len(edges),

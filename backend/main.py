@@ -561,7 +561,9 @@ def download_report(evaluation_id: str, fmt: str = "pdf", db: Session = Depends(
 
     ext      = "docx" if fmt == "docx" else "pdf"
     mime     = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if ext == "docx" else "application/pdf"
-    filename = f"BlindSpot_Report_{ev.name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.{ext}"
+    # Sanitize filename — strip any non-ASCII characters that break latin-1 HTTP headers
+    safe_name = "".join(c if ord(c) < 128 else "_" for c in ev.name).replace(" ", "_")
+    filename = f"BlindSpot_Report_{safe_name}_{datetime.now().strftime('%Y%m%d')}.{ext}"
     fpath    = os.path.join(DATA_DIR, f"reports/{evaluation_id}/report.{ext}")
 
     # Regenerate if file missing (e.g. old evaluation)

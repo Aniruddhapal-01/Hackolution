@@ -6,6 +6,8 @@ import EvaluationPage from "./pages/EvaluationPage";
 import StressTestPage from "./pages/StressTestPage";
 import DatasetsPage from "./pages/DatasetsPage";
 import ReportPage from "./pages/ReportPage";
+import DocsPage from "./pages/DocsPage";
+import PricingPage from "./pages/PricingPage";
 import "./index.css";
 
 export default function App() {
@@ -13,6 +15,8 @@ export default function App() {
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/"                                  element={<LandingPage />} />
+        <Route path="/docs"                              element={<DocsPage />} />
+        <Route path="/pricing"                           element={<PricingPage />} />
         <Route path="/evaluations"                       element={<DashboardPage />} />
         <Route path="/evaluations/:id"                   element={<EvaluationPage />} />
         <Route path="/evaluations/:id/stress"            element={<StressTestPage />} />

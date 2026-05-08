@@ -1,205 +1,333 @@
 import React from "react";
 import { Loader2, CheckCircle, AlertTriangle, XCircle, Info } from "lucide-react";
-import { EvaluationStatus, RiskLevel, STATUS_LABELS, STATUS_COLORS, RISK_COLORS, RISK_BG } from "../api/client";
+import { EvaluationStatus, RiskLevel, STATUS_LABELS } from "../api/client";
 
+const FONT = "'Google Sans', 'Inter', sans-serif";
+const MONO = "'JetBrains Mono', monospace";
+
+// Readable color palette — nothing below #94a3b8 on black backgrounds
+const C = {
+  text:     "#f1f5f9",   // primary text — near white
+  sub:      "#cbd5e1",   // secondary text — light slate
+  muted:    "#94a3b8",   // muted text — still readable
+  label:    "#facc15",   // section labels — yellow
+  border:   "#2d2d2d",   // card borders
+  card:     "#0f0f0f",   // card background
+  cardHov:  "#161616",   // card hover
+};
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 export function StatusBadge({ status }: { status: EvaluationStatus }) {
-  const colorClass = STATUS_COLORS[status] || STATUS_COLORS.created;
-  const label = STATUS_LABELS[status] || status;
   const isActive = ["analyzing","fetching_data","stress_testing","generating_report"].includes(status);
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-mono font-semibold ${colorClass}`}>
-      {isActive ? <Loader2 size={10} className="animate-spin" /> : <span className="w-1.5 h-1.5 rounded-full bg-current" />}
-      {label}
-    </span>
-  );
-}
-
-export function RiskBadge({ level }: { level: RiskLevel }) {
-  const icons: Record<RiskLevel, React.ReactNode> = {
-    low: <CheckCircle size={12}/>, medium: <Info size={12}/>,
-    high: <AlertTriangle size={12}/>, critical: <XCircle size={12}/>
+  const colors: Record<string, { bg: string; color: string; border: string }> = {
+    created:           { bg: "#1a1a1a", color: "#94a3b8", border: "#64748b" },
+    analyzing:         { bg: "#2a2000", color: "#facc15", border: "#facc15" },
+    fetching_data:     { bg: "#1a0030", color: "#c084fc", border: "#a855f7" },
+    stress_testing:    { bg: "#2a1500", color: "#fbbf24", border: "#f59e0b" },
+    generating_report: { bg: "#002a2a", color: "#22d3ee", border: "#06b6d4" },
+    ready:             { bg: "#002a10", color: "#34d399", border: "#10b981" },
+    failed:            { bg: "#2a0000", color: "#f87171", border: "#ef4444" },
   };
+  const c = colors[status] || colors.created;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md border text-[11px] font-mono font-bold uppercase tracking-wider ${RISK_BG[level]} ${RISK_COLORS[level]}`}>
-      {icons[level]} {level}
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: "6px",
+      padding: "4px 12px", borderRadius: "9999px",
+      background: c.bg, color: c.color, border: `1px solid ${c.border}`,
+      fontSize: "14px", fontWeight: 700, fontFamily: MONO,
+      textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap",
+    }}>
+      {isActive
+        ? <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} />
+        : <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: c.color, display: "inline-block" }} />
+      }
+      {STATUS_LABELS[status] || status}
     </span>
   );
 }
 
-export function ProgressBar({ progress, label, color = "blue" }: {
-  progress: number; label?: string; color?: "blue"|"emerald"|"amber"|"violet";
-}) {
-  const colorMap = { blue:"bg-blue-500", emerald:"bg-emerald-500", amber:"bg-amber-500", violet:"bg-violet-500" };
-  const textMap  = { blue:"text-blue-400", emerald:"text-emerald-400", amber:"text-amber-400", violet:"text-violet-400" };
+// ─── Risk Badge ───────────────────────────────────────────────────────────────
+export function RiskBadge({ level }: { level: RiskLevel }) {
+  const map: Record<RiskLevel, { bg: string; color: string; icon: React.ReactNode }> = {
+    low:      { bg: "#002a10", color: "#34d399", icon: <CheckCircle size={11}/> },
+    medium:   { bg: "#2a2000", color: "#fbbf24", icon: <Info size={11}/> },
+    high:     { bg: "#2a1500", color: "#fb923c", icon: <AlertTriangle size={11}/> },
+    critical: { bg: "#2a0000", color: "#f87171", icon: <XCircle size={11}/> },
+  };
+  const c = map[level];
   return (
-    <div className="w-full">
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: "5px",
+      padding: "4px 12px", borderRadius: "9999px",
+      background: c.bg, color: c.color, border: `1px solid ${c.color}`,
+      fontSize: "14px", fontWeight: 700, fontFamily: MONO,
+      textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap",
+    }}>
+      {c.icon} {level}
+    </span>
+  );
+}
+
+// ─── Progress Bar ─────────────────────────────────────────────────────────────
+export function ProgressBar({ progress, label, color = "yellow" }: {
+  progress: number; label?: string; color?: "yellow"|"green"|"red"|"blue"|"purple";
+}) {
+  const colorMap = { yellow: "#facc15", green: "#10b981", red: "#ef4444", blue: "#3b82f6", purple: "#a855f7" };
+  const c = colorMap[color];
+  return (
+    <div style={{ width: "100%" }}>
       {label && (
-        <div className="flex justify-between mb-1.5">
-          <span className="text-xs font-mono text-slate-400">{label}</span>
-          <span className={`text-xs font-mono font-bold ${textMap[color]}`}>{progress}%</span>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+          <span style={{ fontSize: "13px", color: C.sub, fontFamily: MONO }}>{label}</span>
+          <span style={{ fontSize: "13px", fontWeight: 700, color: c, fontFamily: MONO }}>{progress}%</span>
         </div>
       )}
-      <div className="w-full h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-        <div className={`h-full ${colorMap[color]} rounded-full transition-all duration-700`}
-          style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+      <div style={{ width: "100%", height: "5px", background: "#2d2d2d", borderRadius: "9999px", overflow: "hidden" }}>
+        <div style={{
+          height: "100%", background: c, borderRadius: "9999px",
+          width: `${Math.min(100, Math.max(0, progress))}%`,
+          transition: "width 700ms ease",
+        }} />
       </div>
     </div>
   );
 }
 
-export function Card({ children, className = "", onClick, glow }: {
-  children: React.ReactNode; className?: string; onClick?: () => void; glow?: string;
+// ─── Card ─────────────────────────────────────────────────────────────────────
+export function Card({ children, className = "", onClick, style }: {
+  children: React.ReactNode; className?: string; onClick?: () => void; style?: React.CSSProperties;
 }) {
   return (
-    <div onClick={onClick}
-      className={`bg-[#0d1117] border border-white/[0.07] rounded-xl p-5 transition-all duration-200 hover:border-white/[0.12] hover:shadow-lg ${onClick ? "cursor-pointer" : ""} ${className}`}>
+    <div
+      onClick={onClick}
+      style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: "14px",
+        padding: "22px", transition: "border-color 150ms, background 150ms",
+        cursor: onClick ? "pointer" : "default", ...style,
+      }}
+      onMouseEnter={e => {
+        if (onClick) {
+          (e.currentTarget as HTMLDivElement).style.borderColor = "#facc15";
+          (e.currentTarget as HTMLDivElement).style.background = C.cardHov;
+        }
+      }}
+      onMouseLeave={e => {
+        if (onClick) {
+          (e.currentTarget as HTMLDivElement).style.borderColor = C.border;
+          (e.currentTarget as HTMLDivElement).style.background = C.card;
+        }
+      }}
+      className={className}
+    >
       {children}
     </div>
   );
 }
 
+// ─── Button ───────────────────────────────────────────────────────────────────
 export function Button({ children, onClick, variant = "primary", size = "md", disabled = false, loading = false, className = "", type = "button" }: {
   children: React.ReactNode; onClick?: (e: React.MouseEvent) => void;
   variant?: "primary"|"secondary"|"danger"|"ghost"|"success";
   size?: "sm"|"md"|"lg"; disabled?: boolean; loading?: boolean; className?: string; type?: "button"|"submit";
 }) {
-  const base = "inline-flex items-center gap-2 font-mono font-semibold rounded-lg transition-all duration-150 border focus:outline-none";
-  const sizes = { sm:"px-3 py-1.5 text-xs", md:"px-4 py-2 text-sm", lg:"px-6 py-3 text-sm" };
-  const variants = {
-    primary:   "bg-blue-600 border-blue-500 text-white hover:bg-blue-500 disabled:opacity-40",
-    secondary: "bg-white/[0.05] border-white/10 text-slate-300 hover:bg-white/[0.09] disabled:opacity-40",
-    danger:    "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 disabled:opacity-40",
-    ghost:     "bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]",
-    success:   "bg-emerald-600 border-emerald-500 text-white hover:bg-emerald-500 disabled:opacity-40",
+  const sizes = {
+    sm: { padding: "7px 16px",  fontSize: "13px" },
+    md: { padding: "10px 20px", fontSize: "14px" },
+    lg: { padding: "13px 28px", fontSize: "15px" },
+  };
+  const variants: Record<string, React.CSSProperties> = {
+    primary:   { background: "#facc15", color: "#000", border: "2px solid #facc15" },
+    secondary: { background: "transparent", color: "#f1f5f9", border: "2px solid #4b5563" },
+    danger:    { background: "transparent", color: "#f87171", border: "2px solid #ef4444" },
+    ghost:     { background: "transparent", color: "#94a3b8", border: "2px solid transparent" },
+    success:   { background: "#10b981", color: "#000", border: "2px solid #10b981" },
   };
   return (
-    <button type={type} onClick={onClick} disabled={disabled || loading}
-      className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}>
-      {loading && <Loader2 size={14} className="animate-spin" />}
+    <button
+      type={type} onClick={onClick} disabled={disabled || loading}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: "7px",
+        fontFamily: FONT, fontWeight: 700, borderRadius: "8px",
+        cursor: disabled || loading ? "not-allowed" : "pointer",
+        opacity: disabled || loading ? 0.45 : 1,
+        transition: "all 150ms", whiteSpace: "nowrap",
+        ...sizes[size], ...variants[variant],
+      }}
+      className={className}
+    >
+      {loading && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
       {children}
     </button>
   );
 }
 
-export function Input({ label, value, onChange, placeholder, type = "text", required, className = "" }: {
+// ─── Input ────────────────────────────────────────────────────────────────────
+export function Input({ label, value, onChange, placeholder, type = "text", required, className = "", style }: {
   label?: string; value: string | number; onChange: (v: string) => void;
-  placeholder?: string; type?: string; required?: boolean; className?: string;
+  placeholder?: string; type?: string; required?: boolean; className?: string; style?: React.CSSProperties;
 }) {
   return (
-    <div className={className}>
-      {label && <label className="block text-xs font-mono text-slate-400 mb-1.5">{label}{required && <span className="text-red-400 ml-1">*</span>}</label>}
-      <input type={type} value={value} onChange={e => onChange(e.target.value)}
+    <div className={className} style={style}>
+      {label && (
+        <label style={{ display: "block", fontSize: "14px", color: C.sub, marginBottom: "7px", fontFamily: MONO, fontWeight: 600 }}>
+          {label}{required && <span style={{ color: "#f87171", marginLeft: "4px" }}>*</span>}
+        </label>
+      )}
+      <input
+        type={type} value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder} required={required}
-        className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+        style={{
+          width: "100%", background: "#111", border: `1px solid ${C.border}`,
+          borderRadius: "8px", padding: "10px 14px", fontSize: "14px",
+          color: C.text, fontFamily: FONT, outline: "none",
+          transition: "border-color 150ms",
+        }}
+        onFocus={e => (e.target as HTMLInputElement).style.borderColor = "#facc15"}
+        onBlur={e => (e.target as HTMLInputElement).style.borderColor = C.border}
+      />
     </div>
   );
 }
 
+// ─── Select ───────────────────────────────────────────────────────────────────
 export function Select({ label, value, onChange, options, required, className = "" }: {
   label?: string; value: string; onChange: (v: string) => void;
   options: { value: string; label: string }[]; required?: boolean; className?: string;
 }) {
   return (
     <div className={className}>
-      {label && <label className="block text-xs font-mono text-slate-400 mb-1.5">{label}{required && <span className="text-red-400 ml-1">*</span>}</label>}
-      <select value={value} onChange={e => onChange(e.target.value)} required={required}
-        className="w-full bg-[#0d1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500/60 transition-colors">
-        <option value="">Select...</option>
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      {label && (
+        <label style={{ display: "block", fontSize: "14px", color: C.sub, marginBottom: "7px", fontFamily: MONO, fontWeight: 600 }}>
+          {label}{required && <span style={{ color: "#f87171", marginLeft: "4px" }}>*</span>}
+        </label>
+      )}
+      <select
+        value={value} onChange={e => onChange(e.target.value)} required={required}
+        style={{
+          width: "100%", background: "#111", border: `1px solid ${C.border}`,
+          borderRadius: "8px", padding: "10px 14px", fontSize: "14px",
+          color: C.text, fontFamily: FONT, outline: "none",
+          transition: "border-color 150ms",
+        }}
+        onFocus={e => (e.target as HTMLSelectElement).style.borderColor = "#facc15"}
+        onBlur={e => (e.target as HTMLSelectElement).style.borderColor = C.border}
+      >
+        <option value="" style={{ background: "#111", color: C.muted }}>Select...</option>
+        {options.map(o => <option key={o.value} value={o.value} style={{ background: "#111", color: C.text }}>{o.label}</option>)}
       </select>
     </div>
   );
 }
 
-export function MetricCard({ label, value, sub, color = "blue" }: {
+// ─── Metric Card ──────────────────────────────────────────────────────────────
+export function MetricCard({ label, value, sub, color = "yellow" }: {
   label: string; value: string | number; sub?: string;
-  color?: "blue"|"emerald"|"amber"|"violet"|"red";
+  color?: "yellow"|"green"|"red"|"blue"|"purple"|"orange";
 }) {
-  const colorMap = { blue:"text-blue-400", emerald:"text-emerald-400", amber:"text-amber-400", violet:"text-violet-400", red:"text-red-400" };
+  const colorMap = { yellow: "#facc15", green: "#10b981", red: "#ef4444", blue: "#3b82f6", purple: "#a855f7", orange: "#f97316" };
+  const c = colorMap[color];
   return (
-    <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
-      <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest mb-1">{label}</p>
-      <p className={`text-2xl font-bold font-mono ${colorMap[color]}`}>{value}</p>
-      {sub && <p className="text-[10px] text-slate-600 mt-1">{sub}</p>}
+    <div style={{ background: C.card, border: `1px solid ${c}`, borderRadius: "14px", padding: "20px" }}>
+      <p style={{ fontSize: "14px", color: C.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px", fontFamily: MONO, fontWeight: 600 }}>{label}</p>
+      <p style={{ fontSize: "30px", fontWeight: 700, color: c, fontFamily: MONO, lineHeight: 1 }}>{value}</p>
+      {sub && <p style={{ fontSize: "14px", color: C.sub, marginTop: "6px", fontFamily: MONO }}>{sub}</p>}
     </div>
   );
 }
 
+// ─── Section Label (replaces tiny uppercase labels) ───────────────────────────
+export function SectionLabel({ children, color = "#facc15" }: { children: React.ReactNode; color?: string }) {
+  return (
+    <p style={{ fontSize: "14px", color, textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: MONO, fontWeight: 700, marginBottom: "16px" }}>
+      {children}
+    </p>
+  );
+}
+
+// ─── Section Header ───────────────────────────────────────────────────────────
 export function SectionHeader({ step, title, subtitle }: { step?: number; title: string; subtitle?: string }) {
   return (
-    <div className="mb-6">
+    <div style={{ marginBottom: "24px" }}>
       {step !== undefined && (
-        <div className="flex items-center gap-2 mb-2">
-          <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">{step}</span>
-          <span className="text-xs font-mono text-blue-400 uppercase tracking-widest">Step {step}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+          <span style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#facc15", color: "#000", fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO }}>{step}</span>
+          <span style={{ fontSize: "14px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: MONO, fontWeight: 700 }}>Step {step}</span>
         </div>
       )}
-      <h2 className="text-xl font-bold text-white">{title}</h2>
-      {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
+      <h2 style={{ fontSize: "22px", fontWeight: 700, color: C.text, fontFamily: FONT }}>{title}</h2>
+      {subtitle && <p style={{ fontSize: "14px", color: C.sub, marginTop: "6px" }}>{subtitle}</p>}
     </div>
   );
 }
 
+// ─── Empty State ──────────────────────────────────────────────────────────────
 export function EmptyState({ icon, title, description, action }: {
   icon?: React.ReactNode; title: string; description?: string; action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      {icon && <div className="mb-4 text-slate-600">{icon}</div>}
-      <h3 className="font-semibold text-slate-300 mb-2">{title}</h3>
-      {description && <p className="text-sm text-slate-500 mb-6 max-w-sm">{description}</p>}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 20px", textAlign: "center" }}>
+      {icon && <div style={{ marginBottom: "20px", color: "#94a3b8" }}>{icon}</div>}
+      <h3 style={{ fontWeight: 700, fontSize: "18px", color: C.text, marginBottom: "10px", fontFamily: FONT }}>{title}</h3>
+      {description && <p style={{ fontSize: "14px", color: C.sub, marginBottom: "28px", maxWidth: "360px", lineHeight: 1.6 }}>{description}</p>}
       {action}
     </div>
   );
 }
 
+// ─── Confidence Bar ───────────────────────────────────────────────────────────
 export function ConfidenceBar({ value, label }: { value: number; label: string }) {
   const pct   = Math.round(value * 100);
-  const color = pct < 40 ? "bg-red-500" : pct < 60 ? "bg-amber-500" : "bg-emerald-500";
-  const text  = pct < 40 ? "text-red-400" : pct < 60 ? "text-amber-400" : "text-emerald-400";
+  const color = pct < 40 ? "#ef4444" : pct < 60 ? "#f59e0b" : "#10b981";
   return (
-    <div className="mb-3">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-xs font-mono text-slate-400">{label}</span>
-        <span className={`text-xs font-mono font-bold ${text}`}>{pct}%</span>
+    <div style={{ marginBottom: "14px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+        <span style={{ fontSize: "13px", color: C.sub, fontFamily: MONO, textTransform: "capitalize" }}>{label}</span>
+        <span style={{ fontSize: "13px", fontWeight: 700, color, fontFamily: MONO }}>{pct}%</span>
       </div>
-      <div className="w-full h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+      <div style={{ width: "100%", height: "5px", background: "#2d2d2d", borderRadius: "9999px", overflow: "hidden" }}>
+        <div style={{ height: "100%", background: color, borderRadius: "9999px", width: `${pct}%`, transition: "width 700ms ease" }} />
       </div>
     </div>
   );
 }
 
+// ─── Pipeline Steps ───────────────────────────────────────────────────────────
 export function PipelineSteps({ currentStatus }: { currentStatus: EvaluationStatus }) {
   const steps = [
-    { key: "created",           label: "Upload"    },
-    { key: "analyzing",         label: "Analysis"  },
-    { key: "fetching_data",     label: "Datasets"  },
-    { key: "stress_testing",    label: "Testing"   },
-    { key: "generating_report", label: "Report"    },
-    { key: "ready",             label: "Done"      },
+    { key: "created",           label: "Upload"   },
+    { key: "analyzing",         label: "Analysis" },
+    { key: "fetching_data",     label: "Datasets" },
+    { key: "stress_testing",    label: "Testing"  },
+    { key: "generating_report", label: "Report"   },
+    { key: "ready",             label: "Done"     },
   ];
   const order = steps.map(s => s.key);
   const currentIdx = order.indexOf(currentStatus);
+
   return (
-    <div className="flex items-center gap-0">
+    <div style={{ display: "flex", alignItems: "center" }}>
       {steps.map((step, i) => {
         const done   = i < currentIdx || currentStatus === "ready";
         const active = order[i] === currentStatus && currentStatus !== "ready";
         return (
           <React.Fragment key={step.key}>
-            <div className="flex flex-col items-center gap-1">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border transition-all ${
-                done   ? "bg-emerald-600 border-emerald-500 text-white" :
-                active ? "bg-blue-600 border-blue-400 text-white animate-pulse" :
-                         "bg-white/[0.04] border-white/10 text-slate-600"
-              }`}>{done ? "✓" : i + 1}</div>
-              <span className={`text-[9px] font-mono uppercase tracking-wider ${
-                done ? "text-emerald-400" : active ? "text-blue-400" : "text-slate-600"
-              }`}>{step.label}</span>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+              <div style={{
+                width: "32px", height: "32px", borderRadius: "50%",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "14px", fontWeight: 700, fontFamily: MONO,
+                background: done ? "#facc15" : active ? "#facc15" : "#1a1a1a",
+                color: done || active ? "#000" : "#cbd5e1",
+                border: done || active ? "none" : `1px solid #374151`,
+              }}>
+                {done ? "✓" : i + 1}
+              </div>
+              <span style={{ fontSize: "13px", fontFamily: MONO, textTransform: "uppercase", letterSpacing: "0.08em", color: done || active ? "#facc15" : "#cbd5e1", whiteSpace: "nowrap" }}>
+                {step.label}
+              </span>
             </div>
             {i < steps.length - 1 && (
-              <div className={`h-px w-6 mb-4 transition-all ${done ? "bg-emerald-600" : "bg-white/[0.06]"}`} />
+              <div style={{ height: "2px", width: "28px", marginBottom: "18px", background: done ? "#facc15" : "#2d2d2d", transition: "background 300ms" }} />
             )}
           </React.Fragment>
         );
@@ -207,3 +335,6 @@ export function PipelineSteps({ currentStatus }: { currentStatus: EvaluationStat
     </div>
   );
 }
+
+// Export color constants for use in pages
+export { C, FONT, MONO };
