@@ -54,11 +54,18 @@ export default function ReportPage() {
             <p className="text-sm text-slate-500 ml-6">{ev.name}</p>
           </div>
           {ev.status === "ready" && (
-            <a href={`http://localhost:8000/api/evaluations/${id}/report`} download>
-              <Button variant="primary" size="sm">
-                <Download size={13} /> Download CSV Report
-              </Button>
-            </a>
+            <div className="flex items-center gap-3">
+              <a href={`http://localhost:8000/api/evaluations/${id}/report?fmt=pdf`} download>
+                <Button variant="primary" size="sm">
+                  <Download size={13} /> Download PDF
+                </Button>
+              </a>
+              <a href={`http://localhost:8000/api/evaluations/${id}/report?fmt=docx`} download>
+                <Button variant="secondary" size="sm">
+                  <Download size={13} /> Download DOCX
+                </Button>
+              </a>
+            </div>
           )}
         </div>
 

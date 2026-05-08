@@ -553,24 +553,69 @@ def get_status(evaluation_id: str, db: Session = Depends(get_db)):
 # ─── Report download ──────────────────────────────────────────────────────────
 
 @app.get("/api/evaluations/{evaluation_id}/report")
-def download_report(evaluation_id: str, db: Session = Depends(get_db)):
-    """Stream the CSV report for download."""
+def download_report(evaluation_id: str, fmt: str = "pdf", db: Session = Depends(get_db)):
+    """Download the evaluation report. fmt=pdf (default) or fmt=docx"""
     ev = _get_eval_or_404(evaluation_id, db)
     if ev.status != EvaluationStatus.READY:
         raise HTTPException(status_code=400, detail="Report not ready yet")
 
-    csv_path = os.path.join(DATA_DIR, f"reports/{evaluation_id}/summary.csv")
-    if not os.path.exists(csv_path):
-        raise HTTPException(status_code=404, detail="Report file not found")
+    ext      = "docx" if fmt == "docx" else "pdf"
+    mime     = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if ext == "docx" else "application/pdf"
+    filename = f"BlindSpot_Report_{ev.name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.{ext}"
+    fpath    = os.path.join(DATA_DIR, f"reports/{evaluation_id}/report.{ext}")
 
-    with open(csv_path, "r") as f:
-        content = f.read()
+    # Regenerate if file missing (e.g. old evaluation)
+    if not os.path.exists(fpath):
+        try:
+            from services.report_generation_service import generate_report
+            from models import StressTestResult as STR, DatasetRecord as DR
+            db2 = __import__("models").SessionLocal()
+            ev2 = db2.query(ModelEvaluation).filter(ModelEvaluation.id == evaluation_id).first()
+            stress  = [{"stressor_key": r.stressor_key, "stressor_label": r.stressor_label,
+                        "original_score": r.original_score, "stressed_score": r.stressed_score,
+                        "degradation_pct": r.degradation_pct, "confidence_stability": r.confidence_stability,
+                        "sample_count": r.sample_count, "passed": r.passed, "notes": r.notes}
+                       for r in db2.query(STR).filter(STR.evaluation_id == evaluation_id).all()]
+            datasets= [{"source": d.source, "name": d.dataset_name, "sample_count": d.sample_count,
+                        "samples": d.sample_count}
+                       for d in db2.query(DR).filter(DR.evaluation_id == evaluation_id).all()]
+            db2.close()
+            report_data = {
+                "name": ev2.name, "architecture": ev2.architecture, "framework": ev2.framework,
+                "dataset_type": ev2.dataset_type, "model_filename": ev2.model_filename,
+                "model_size_bytes": ev2.model_size_bytes,
+                "original_metrics": {"accuracy": ev2.metric_accuracy, "precision": ev2.metric_precision,
+                                     "recall": ev2.metric_recall, "f1": ev2.metric_f1,
+                                     "map": ev2.metric_map, "roc_auc": ev2.metric_roc_auc},
+                "detected_task_type": ev2.detected_task_type, "domain": None,
+                "scope_summary": ev2.scope_summary,
+                "edge_case_analysis": ev2.edge_case_analysis or [],
+                "weakness_report": ev2.weakness_report or {},
+                "fetched_datasets": datasets,
+                "stress_results": stress,
+                "robustness_score": ev2.robustness_score,
+                "risk_level": str(ev2.risk_level or "high"),
+                "deployment_ready": ev2.deployment_ready,
+            }
+            generate_report(evaluation_id, report_data)
+        except Exception as e:
+            logger.error(f"[Report regen] {e}")
 
-    filename = f"BlindSpot_Report_{ev.name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv"
+    if not os.path.exists(fpath):
+        raise HTTPException(status_code=404, detail=f"Report file not found. Try re-running the evaluation.")
+
+    def iter_file():
+        with open(fpath, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+
     return StreamingResponse(
-        iter([content]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        iter_file(),
+        media_type=mime,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Length": str(os.path.getsize(fpath)),
+        },
     )
 
 

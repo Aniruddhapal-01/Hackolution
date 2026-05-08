@@ -198,21 +198,86 @@ def _generate_image_dataset(out_dir, stressor_key, n_samples):
 
 
 def _make_base_image(idx):
-    w, h = 512, 512
+    """Draw a realistic road scene with a car as the target object."""
+    w, h = 640, 480
     img = Image.new("RGB", (w, h))
     draw = ImageDraw.Draw(img)
-    for y in range(h):
-        r = int(135 + (y / h) * 80)
-        g = int(160 + (y / h) * 60)
-        b = int(200 - (y / h) * 40)
-        draw.line([(0, y), (w, y)], fill=(r, g, b))
-    draw.rectangle([0, h*3//4, w, h], fill=(80+random.randint(-20,20), 100+random.randint(-20,20), 60+random.randint(-20,20)))
-    cx, cy = w//2 + random.randint(-60,60), h//2 + random.randint(-40,40)
-    obj_w, obj_h = random.randint(80,140), random.randint(50,90)
-    col = (random.randint(40,180), random.randint(40,180), random.randint(40,180))
-    draw.rectangle([cx-obj_w//2, cy-obj_h//2, cx+obj_w//2, cy+obj_h//2], fill=col, outline=(255,255,255), width=2)
-    for wx in [cx-obj_w//4, cx+obj_w//4]:
-        draw.rectangle([wx-10, cy-obj_h//4, wx+10, cy+obj_h//4], fill=(200,230,255))
+
+    # Sky gradient
+    sky_palettes = [
+        [(100,149,237),(135,180,255)],
+        [(180,180,200),(210,210,220)],
+        [(255,200,100),(255,160,60)],
+        [(40,50,80),(60,70,100)],
+    ]
+    sky = sky_palettes[idx % len(sky_palettes)]
+    for y in range(h*2//3):
+        t = y/(h*2//3)
+        r = int(sky[0][0]*(1-t)+sky[1][0]*t)
+        g = int(sky[0][1]*(1-t)+sky[1][1]*t)
+        b = int(sky[0][2]*(1-t)+sky[1][2]*t)
+        draw.line([(0,y),(w,y)], fill=(r,g,b))
+
+    # Road
+    road_y = h*2//3
+    draw.rectangle([0, road_y, w, h], fill=(75,75,75))
+    draw.rectangle([0, road_y, w, road_y+8], fill=(110,110,110))
+    lane_y = road_y + (h-road_y)//2
+    for lx in range(0, w, 60):
+        draw.rectangle([lx, lane_y-3, lx+35, lane_y+3], fill=(220,220,180))
+
+    # Background buildings
+    for bx in range(0, w, random.randint(55,90)):
+        bh2 = random.randint(35,110)
+        bw2 = random.randint(28,65)
+        bc = (random.randint(90,150),)*3
+        draw.rectangle([bx, road_y-bh2, bx+bw2, road_y], fill=bc)
+        for wy in range(road_y-bh2+8, road_y-8, 18):
+            for wx2 in range(bx+5, bx+bw2-5, 14):
+                wc = (220,230,255) if random.random()>0.4 else (40,40,60)
+                draw.rectangle([wx2, wy, wx2+8, wy+10], fill=wc)
+
+    # Car colors
+    car_colors = [(220,30,30),(30,80,200),(240,240,240),(30,30,30),(180,140,40),(60,160,60),(160,160,160)]
+    car_col = car_colors[idx % len(car_colors)]
+    dark_col = tuple(max(0,c-60) for c in car_col)
+    glass_col = (160,200,230)
+
+    cx = w//2 + random.randint(-50,50)
+    car_w, car_h2 = 220, 80
+    car_top = road_y - car_h2 - 10
+    car_bot = road_y - 10
+
+    # Body
+    draw.rectangle([cx-car_w//2, car_top+30, cx+car_w//2, car_bot], fill=car_col)
+    # Roof
+    draw.polygon([(cx-car_w//2+30,car_top+30),(cx+car_w//2-30,car_top+30),(cx+car_w//2-55,car_top),(cx-car_w//2+55,car_top)], fill=car_col)
+    # Windshield
+    draw.polygon([(cx-car_w//2+35,car_top+28),(cx-car_w//2+60,car_top+2),(cx,car_top+2),(cx,car_top+28)], fill=glass_col)
+    # Rear window
+    draw.polygon([(cx,car_top+28),(cx,car_top+2),(cx+car_w//2-58,car_top+2),(cx+car_w//2-33,car_top+28)], fill=glass_col)
+    # Side windows
+    draw.rectangle([cx-car_w//2+62, car_top+4, cx-4, car_top+26], fill=glass_col)
+    draw.rectangle([cx+4, car_top+4, cx+car_w//2-60, car_top+26], fill=glass_col)
+    # Hood / trunk
+    draw.rectangle([cx-car_w//2, car_top+30, cx-car_w//2+35, car_top+50], fill=dark_col)
+    draw.rectangle([cx+car_w//2-35, car_top+30, cx+car_w//2, car_top+50], fill=dark_col)
+    # Headlights
+    draw.ellipse([cx-car_w//2+5, car_top+35, cx-car_w//2+28, car_top+52], fill=(255,255,200))
+    draw.ellipse([cx+car_w//2-28, car_top+35, cx+car_w//2-5, car_top+52], fill=(255,100,100))
+    # Wheels
+    for wx2 in [cx-car_w//2+45, cx+car_w//2-45]:
+        draw.ellipse([wx2-22, car_bot-27, wx2+22, car_bot+17], fill=(25,25,25))
+        draw.ellipse([wx2-12, car_bot-17, wx2+12, car_bot+7], fill=(160,160,160))
+    # Door line + handles
+    draw.line([(cx-5,car_top+30),(cx-5,car_bot)], fill=dark_col, width=2)
+    draw.rectangle([cx-40,car_top+48,cx-20,car_top+53], fill=dark_col)
+    draw.rectangle([cx+20,car_top+48,cx+40,car_top+53], fill=dark_col)
+
+    # Label
+    draw.rectangle([cx-car_w//2, car_top-16, cx-car_w//2+90, car_top-2], fill=(0,0,0))
+    draw.text((cx-car_w//2+3, car_top-14), "CAR", fill=(0,255,0))
+
     return img
 
 
