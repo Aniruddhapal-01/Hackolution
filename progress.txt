@@ -1,0 +1,14 @@
+## Phase 1 — AxiomSynth Core (MVP)
+- [x] Full Docker stack: api, worker, redis, postgres, minio, frontend
+- [x] Project CRUD API with PostgreSQL persistence
+- [x] Seed image upload to MinIO via multipart
+- [x] Mock + Real LoRA training pipeline (PEFT SDXL)
+- [x] 8-stressor adversarial vulnerability scan (mock + real endpoint)
+- [x] Full SDXL + LoRA + ControlNet generative engine
+- [x] PIL/NumPy physics refinement layer (all 8 stressors)
+- [x] Mask R-CNN auto-labeling → COCO JSON + YOLO output
+- [x] Dataset ZIP packaging and presigned URL delivery
+- [x] React dashboard: Projects list, 4-tab project detail, vulnerability bar chart
+- [x] Real-time progress polling (3s interval)
+----------
+ralph-done-fl9mw
