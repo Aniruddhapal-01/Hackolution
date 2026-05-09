@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Display:wght@400;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,21 +6,33 @@
 
 @layer base {
   body {
-    @apply bg-[#080b10] text-slate-200 antialiased;
-    font-family: 'Inter', sans-serif;
+    background: #000000;
+    color: #e2e8f0;
+    font-family: 'Google Sans', 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Google Sans Display', 'Google Sans', sans-serif;
   }
   * { box-sizing: border-box; }
 }
 
 @layer components {
-  .font-mono { font-family: 'JetBrains Mono', monospace; }
-  .page-layout { @apply ml-64 pt-16 min-h-screen; }
-  .page-content { @apply px-8 py-8; }
-  .glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(12px); }
+  .font-mono { font-family: 'JetBrains Mono', monospace !important; }
+
+  /* Sidebar is 256px wide, top navbar is 64px tall */
+  .page-layout {
+    margin-left: 256px;
+    min-height: 100vh;
+    background: #000000;
+  }
+  /* 90px top = 64px navbar + 26px breathing room, 32px sides */
+  .page-content {
+    padding: 90px 32px 32px;
+  }
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
-::selection { background: rgba(59,130,246,0.3); color: #fff; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #facc15; border-radius: 10px; }
+::selection { background: #facc15; color: #000; }

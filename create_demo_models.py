@@ -6,14 +6,13 @@ Run with:  python create_demo_models.py
 
 Output:
   demo_models/
-    image_classifier.pkl       — RandomForest image classifier (CIFAR-like features)
-    tabular_classifier.pkl     — GradientBoosting fraud detector
-    timeseries_forecaster.pkl  — Ridge regression time-series model
-    text_classifier.pkl        — LogisticRegression NLP classifier
+    car_detector.pkl           — RandomForest car detection model (HOG-like features)
+    car_classifier.pkl         — GradientBoosting car make/model classifier
+    car_damage_detector.pkl    — LogisticRegression car damage detection
+    car_counter.pkl            — Ridge regression vehicle counting model
 """
 
 import os
-import pickle
 import joblib
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -30,8 +29,244 @@ os.makedirs(OUT_DIR, exist_ok=True)
 np.random.seed(42)
 
 print("=" * 60)
-print("  BlindSpot.AI — Demo Model Generator")
+print("  BlindSpot.AI — Car Detection Demo Model Generator")
 print("=" * 60)
+
+
+# ─── Model 1: Car Detector (Random Forest on HOG features) ───────────────────
+print("\n[1/4] Training car_detector.pkl ...")
+print("      Simulates a YOLOv8-style car detector trained on")
+print("      HOG + color histogram features (2048-dim) from dashcam footage.")
+
+X, y = make_classification(
+    n_samples=4000, n_features=128, n_informative=90,
+    n_redundant=20, n_classes=3,          # car / truck / motorcycle
+    random_state=42
+)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = Pipeline([
+    ("scaler", StandardScaler()),
+    ("clf", RandomForestClassifier(n_estimators=120, max_depth=14, random_state=42, n_jobs=-1))
+])
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+
+acc  = accuracy_score(y_test, y_pred)
+f1   = f1_score(y_test, y_pred, average="weighted")
+prec = precision_score(y_test, y_pred, average="weighted")
+rec  = recall_score(y_test, y_pred, average="weighted")
+
+path = os.path.join(OUT_DIR, "car_detector.pkl")
+joblib.dump(model, path)
+print(f"      Saved: {path}  ({os.path.getsize(path)//1024} KB)")
+print(f"      Accuracy: {acc:.3f}  F1: {f1:.3f}  Precision: {prec:.3f}  Recall: {rec:.3f}")
+print(f"\n  USE THESE INPUTS IN THE DASHBOARD:")
+print(f"  ┌─────────────────────────────────────────────────────┐")
+print(f"  │ Evaluation Name : Car Detection — YOLOv8 Style      │")
+print(f"  │ Dataset Type    : Image Dataset                      │")
+print(f"  │ Architecture    : YOLOv8 (HOG + RandomForest)        │")
+print(f"  │ Framework       : PyTorch                            │")
+print(f"  │ Optimizer       : Adam                               │")
+print(f"  │ Learning Rate   : 0.001                              │")
+print(f"  │ Epochs          : 80                                 │")
+print(f"  │ Batch Size      : 16                                 │")
+print(f"  │ Input Size      : 640x640                            │")
+print(f"  │ Accuracy        : {acc:.2f}                               │")
+print(f"  │ Precision       : {prec:.2f}                               │")
+print(f"  │ Recall          : {rec:.2f}                               │")
+print(f"  │ F1 Score        : {f1:.2f}                               │")
+print(f"  │ mAP             : 0.68                               │")
+print(f"  │ ROC-AUC         : 0.91                               │")
+print(f"  │ Model File      : demo_models/car_detector.pkl       │")
+print(f"  └─────────────────────────────────────────────────────┘")
+
+
+# ─── Model 2: Car Make/Model Classifier (Gradient Boosting) ──────────────────
+print("\n[2/4] Training car_classifier.pkl ...")
+print("      Simulates a ResNet50 fine-tuned on Stanford Cars Dataset.")
+print("      Classifies car make/model from front-facing images.")
+
+X, y = make_classification(
+    n_samples=6000, n_features=256, n_informative=180,
+    n_redundant=40, n_classes=5,          # sedan / SUV / truck / coupe / hatchback
+    random_state=42
+)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model2 = Pipeline([
+    ("scaler", StandardScaler()),
+    ("clf", GradientBoostingClassifier(n_estimators=200, max_depth=6, learning_rate=0.05, random_state=42))
+])
+model2.fit(X_train, y_train)
+y_pred = model2.predict(X_test)
+
+acc2  = accuracy_score(y_test, y_pred)
+f12   = f1_score(y_test, y_pred, average="weighted")
+prec2 = precision_score(y_test, y_pred, average="weighted")
+rec2  = recall_score(y_test, y_pred, average="weighted")
+
+path2 = os.path.join(OUT_DIR, "car_classifier.pkl")
+joblib.dump(model2, path2)
+print(f"      Saved: {path2}  ({os.path.getsize(path2)//1024} KB)")
+print(f"      Accuracy: {acc2:.3f}  F1: {f12:.3f}  Precision: {prec2:.3f}  Recall: {rec2:.3f}")
+print(f"\n  USE THESE INPUTS IN THE DASHBOARD:")
+print(f"  ┌─────────────────────────────────────────────────────┐")
+print(f"  │ Evaluation Name : Car Type Classifier — ResNet50     │")
+print(f"  │ Dataset Type    : Image Dataset                      │")
+print(f"  │ Architecture    : ResNet50                           │")
+print(f"  │ Framework       : PyTorch                            │")
+print(f"  │ Optimizer       : SGD + Momentum                     │")
+print(f"  │ Learning Rate   : 0.01                               │")
+print(f"  │ Epochs          : 60                                 │")
+print(f"  │ Batch Size      : 32                                 │")
+print(f"  │ Input Size      : 224x224                            │")
+print(f"  │ Accuracy        : {acc2:.2f}                               │")
+print(f"  │ Precision       : {prec2:.2f}                               │")
+print(f"  │ Recall          : {rec2:.2f}                               │")
+print(f"  │ F1 Score        : {f12:.2f}                               │")
+print(f"  │ mAP             : 0.74                               │")
+print(f"  │ ROC-AUC         : 0.93                               │")
+print(f"  │ Model File      : demo_models/car_classifier.pkl     │")
+print(f"  └─────────────────────────────────────────────────────┘")
+
+
+# ─── Model 3: Car Damage Detector (Logistic Regression) ──────────────────────
+print("\n[3/4] Training car_damage_detector.pkl ...")
+print("      Simulates an EfficientNet-B0 fine-tuned for insurance")
+print("      damage assessment: scratch / dent / major damage / none.")
+
+X, y = make_classification(
+    n_samples=5000, n_features=512, n_informative=300,
+    n_redundant=100, n_classes=4,         # none / scratch / dent / major
+    random_state=42
+)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model3 = Pipeline([
+    ("scaler", StandardScaler()),
+    ("clf", LogisticRegression(max_iter=500, C=0.5, random_state=42))
+])
+model3.fit(X_train, y_train)
+y_pred = model3.predict(X_test)
+
+acc3  = accuracy_score(y_test, y_pred)
+f13   = f1_score(y_test, y_pred, average="weighted")
+prec3 = precision_score(y_test, y_pred, average="weighted")
+rec3  = recall_score(y_test, y_pred, average="weighted")
+
+path3 = os.path.join(OUT_DIR, "car_damage_detector.pkl")
+joblib.dump(model3, path3)
+print(f"      Saved: {path3}  ({os.path.getsize(path3)//1024} KB)")
+print(f"      Accuracy: {acc3:.3f}  F1: {f13:.3f}  Precision: {prec3:.3f}  Recall: {rec3:.3f}")
+print(f"\n  USE THESE INPUTS IN THE DASHBOARD:")
+print(f"  ┌─────────────────────────────────────────────────────┐")
+print(f"  │ Evaluation Name : Car Damage Detector — EfficientNet │")
+print(f"  │ Dataset Type    : Image Dataset                      │")
+print(f"  │ Architecture    : EfficientNet-B0                    │")
+print(f"  │ Framework       : TensorFlow                         │")
+print(f"  │ Optimizer       : Adam                               │")
+print(f"  │ Learning Rate   : 0.0005                             │")
+print(f"  │ Epochs          : 40                                 │")
+print(f"  │ Batch Size      : 64                                 │")
+print(f"  │ Input Size      : 300x300                            │")
+print(f"  │ Accuracy        : {acc3:.2f}                               │")
+print(f"  │ Precision       : {prec3:.2f}                               │")
+print(f"  │ Recall          : {rec3:.2f}                               │")
+print(f"  │ F1 Score        : {f13:.2f}                               │")
+print(f"  │ mAP             : (leave blank)                      │")
+print(f"  │ ROC-AUC         : 0.89                               │")
+print(f"  │ Model File      : demo_models/car_damage_detector.pkl│")
+print(f"  └─────────────────────────────────────────────────────┘")
+
+
+# ─── Model 4: Vehicle Counter (Ridge Regression) ─────────────────────────────
+print("\n[4/4] Training car_counter.pkl ...")
+print("      Simulates a CNN regression model for counting vehicles")
+print("      in traffic camera frames (0-50 vehicles per frame).")
+
+X, y = make_regression(
+    n_samples=5000, n_features=128, n_informative=80,
+    noise=2.5, random_state=42
+)
+# Clip to realistic vehicle count range 0-50
+y = np.clip(np.abs(y / y.std() * 8 + 12), 0, 50)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model4 = Pipeline([
+    ("scaler", StandardScaler()),
+    ("reg", Ridge(alpha=0.5))
+])
+model4.fit(X_train, y_train)
+r2 = model4.score(X_test, y_test)
+
+path4 = os.path.join(OUT_DIR, "car_counter.pkl")
+joblib.dump(model4, path4)
+print(f"      Saved: {path4}  ({os.path.getsize(path4)//1024} KB)")
+print(f"      R2 Score: {r2:.3f}")
+print(f"\n  USE THESE INPUTS IN THE DASHBOARD:")
+print(f"  ┌─────────────────────────────────────────────────────┐")
+print(f"  │ Evaluation Name : Traffic Vehicle Counter — CNN Reg  │")
+print(f"  │ Dataset Type    : Image Dataset                      │")
+print(f"  │ Architecture    : Custom CNN Regression Head         │")
+print(f"  │ Framework       : PyTorch                            │")
+print(f"  │ Optimizer       : AdamW                              │")
+print(f"  │ Learning Rate   : 0.0003                             │")
+print(f"  │ Epochs          : 100                                │")
+print(f"  │ Batch Size      : 8                                  │")
+print(f"  │ Input Size      : 1280x720                           │")
+print(f"  │ Accuracy        : {min(r2, 0.99):.2f}                               │")
+print(f"  │ Precision       : (leave blank)                      │")
+print(f"  │ Recall          : (leave blank)                      │")
+print(f"  │ F1 Score        : (leave blank)                      │")
+print(f"  │ mAP             : 0.61                               │")
+print(f"  │ ROC-AUC         : (leave blank)                      │")
+print(f"  │ Model File      : demo_models/car_counter.pkl        │")
+print(f"  └─────────────────────────────────────────────────────┘")
+
+
+# ─── Summary ──────────────────────────────────────────────────────────────────
+print("\n" + "=" * 60)
+print("  All 4 car detection demo models created in: demo_models/")
+print("=" * 60)
+print("\n  FILES:")
+for f in sorted(os.listdir(OUT_DIR)):
+    fpath = os.path.join(OUT_DIR, f)
+    size  = os.path.getsize(fpath) / 1024
+    print(f"    {f:<40} {size:>8.1f} KB")
+
+print("""
+  RECOMMENDED TEST ORDER:
+  ─────────────────────────────────────────────────────
+  1. car_detector.pkl        ← Best demo (lowest accuracy,
+                               most vulnerabilities detected,
+                               richest stress test results)
+
+  2. car_classifier.pkl      ← Good for showing fog/occlusion
+                               stressors on car type recognition
+
+  3. car_damage_detector.pkl ← Shows how damage detection
+                               degrades under rain/night
+
+  4. car_counter.pkl         ← Regression model, shows how
+                               vehicle counting fails in fog
+
+  HOW TO USE:
+  ─────────────────────────────────────────────────────
+  1. Open http://localhost:3001
+  2. Click 'New Evaluation'
+  3. Copy the inputs from the box above for any model
+  4. Click 'Create & Continue'
+  5. On the Evaluation page, drag & drop the .pkl file
+  6. Click 'Run Evaluation'
+  7. Watch the 4-stage pipeline:
+       Analyzing → Fetching Datasets → Stress Testing → Report
+  8. Go to Datasets tab to download synthetic car images
+     (fog, rain, occlusion, night, motion blur applied to cars)
+  9. Download PDF/DOCX report from the Report tab
+""")
+
 
 
 # ─── Model 1: Image Classifier (Random Forest on HOG-like features) ──────────

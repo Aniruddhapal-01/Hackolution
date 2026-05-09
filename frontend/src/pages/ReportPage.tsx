@@ -1,11 +1,13 @@
 import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { FileText, Download, CheckCircle, XCircle, AlertTriangle, ArrowLeft, Loader2, Shield } from "lucide-react";
+import { FileText, Download, CheckCircle, XCircle, AlertTriangle, ArrowLeft, Loader2, Shield, TrendingUp } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import TopNavBar from "../components/TopNavBar";
-import { StatusBadge, RiskBadge, MetricCard, Card, Button, ConfidenceBar } from "../components/ui";
+import { StatusBadge, RiskBadge, MetricCard, Button, ConfidenceBar, FONT, MONO } from "../components/ui";
 import { useEvaluation, useEvaluations } from "../hooks/useProject";
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from "recharts";
+
+
 
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>();
@@ -14,8 +16,8 @@ export default function ReportPage() {
   const { evaluations } = useEvaluations();
 
   if (loading) return (
-    <div className="min-h-screen bg-[#080b10] flex items-center justify-center">
-      <Loader2 size={24} className="animate-spin text-blue-500" />
+    <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Loader2 size={24} color="#facc15" style={{ animation: "spin 1s linear infinite" }} />
     </div>
   );
   if (!evaluation) return null;
@@ -25,234 +27,267 @@ export default function ReportPage() {
   const datasets = ev.dataset_records     || [];
   const edges    = ev.edge_case_analysis  || [];
   const weakness = ev.weakness_report;
+  const score    = ev.robustness_score || 0;
+  const scoreColor = score >= 80 ? "#10b981" : score >= 60 ? "#facc15" : "#ef4444";
 
-  const radarData = results.slice(0, 7).map(r => ({
+  const radarData = results.slice(0,7).map(r => ({
     subject: (r.stressor_label || r.stressor_key).replace(/_/g," ").slice(0,12),
-    score:   Math.round((r.stressed_score || 0) * 100),
+    score:   Math.round((r.stressed_score||0)*100),
   }));
 
-  const score = ev.robustness_score || 0;
-  const scoreColor = score >= 80 ? "text-emerald-400" : score >= 60 ? "text-amber-400" : "text-red-400";
-  const scoreBg    = score >= 80 ? "bg-emerald-500/10 border-emerald-500/30" : score >= 60 ? "bg-amber-500/10 border-amber-500/30" : "bg-red-500/10 border-red-500/30";
-
   return (
-    <div className="min-h-screen bg-[#080b10]">
+    <div style={{ background: "#000", minHeight: "100vh", fontFamily: FONT }}>
       <Sidebar evaluations={evaluations} activeId={id} onNew={() => navigate("/evaluations")} />
       <TopNavBar evaluationId={id} />
 
       <div className="page-layout page-content">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <button onClick={() => navigate(`/evaluations/${id}`)} className="text-slate-500 hover:text-white transition-colors">
-                <ArrowLeft size={16} />
-              </button>
-              <h1 className="text-2xl font-bold text-white">Evaluation Report</h1>
-              <StatusBadge status={ev.status} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <button onClick={() => navigate(`/evaluations/${id}`)} style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", padding: "4px" }}>
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#fff" }}>Evaluation Report</h1>
+                <StatusBadge status={ev.status} />
+              </div>
+              <p style={{ fontSize: "14px", color: "#94a3b8", marginTop: "2px" }}>{ev.name}</p>
             </div>
-            <p className="text-sm text-slate-500 ml-6">{ev.name}</p>
           </div>
           {ev.status === "ready" && (
-            <a href={`http://localhost:8000/api/evaluations/${id}/report`} download>
-              <Button variant="primary" size="sm">
-                <Download size={13} /> Download CSV Report
-              </Button>
-            </a>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <a href={`http://localhost:8000/api/evaluations/${id}/report?fmt=pdf`} download>
+                <Button variant="primary" size="sm"><Download size={13} /> Download PDF</Button>
+              </a>
+              <a href={`http://localhost:8000/api/evaluations/${id}/report?fmt=docx`} download>
+                <Button variant="secondary" size="sm"><Download size={13} /> Download DOCX</Button>
+              </a>
+            </div>
           )}
         </div>
 
         {ev.status !== "ready" ? (
-          <Card className="text-center py-16">
-            <FileText size={32} className="text-slate-700 mx-auto mb-4" />
-            <p className="text-slate-400">Report will be available after evaluation completes.</p>
-            <Button onClick={() => navigate(`/evaluations/${id}`)} variant="secondary" className="mt-4">
-              Go to Evaluation
-            </Button>
-          </Card>
+          <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "64px 20px", textAlign: "center" }}>
+            <FileText size={32} color="#64748b" style={{ margin: "0 auto 16px" }} />
+            <p style={{ color: "#cbd5e1", marginBottom: "16px" }}>Report will be available after evaluation completes.</p>
+            <Button onClick={() => navigate(`/evaluations/${id}`)} variant="secondary">Go to Evaluation</Button>
+          </div>
         ) : (
-          <div className="space-y-6">
-            {/* Final Assessment Banner */}
-            <div className={`rounded-2xl border p-6 ${scoreBg}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className={`w-16 h-16 rounded-2xl border flex items-center justify-center ${scoreBg}`}>
-                    <Shield size={28} className={scoreColor} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-1">Final Assessment</p>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-4xl font-bold font-mono ${scoreColor}`}>{score.toFixed(1)}%</span>
-                      <span className="text-slate-400 text-sm">Robustness Score</span>
-                      {ev.risk_level && <RiskBadge level={ev.risk_level} />}
-                    </div>
+          <>
+            {/* Score Banner */}
+            <div style={{ background: "#0a0a0a", border: `2px solid ${scoreColor}`, borderRadius: "12px", padding: "24px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div style={{ width: "56px", height: "56px", borderRadius: "12px", background: "#111", border: `2px solid ${scoreColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Shield size={24} color={scoreColor} />
+                </div>
+                <div>
+                  <p style={{ fontSize: "13px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, marginBottom: "4px" }}>Final Assessment</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ fontSize: "36px", fontWeight: 700, color: scoreColor, fontFamily: MONO, lineHeight: 1 }}>{score.toFixed(1)}%</span>
+                    <span style={{ fontSize: "14px", color: "#cbd5e1" }}>Robustness Score</span>
+                    {ev.risk_level && <RiskBadge level={ev.risk_level} />}
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-mono text-slate-500 mb-1">Deployment Ready</p>
-                  <div className={`flex items-center gap-2 justify-end ${ev.deployment_ready ? "text-emerald-400" : "text-red-400"}`}>
-                    {ev.deployment_ready ? <CheckCircle size={18} /> : <XCircle size={18} />}
-                    <span className="font-bold text-lg">{ev.deployment_ready ? "YES" : "NO"}</span>
-                  </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontSize: "13px", color: "#94a3b8", fontFamily: MONO, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "6px" }}>Deployment Ready</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "flex-end", color: ev.deployment_ready ? "#10b981" : "#ef4444" }}>
+                  {ev.deployment_ready ? <CheckCircle size={18} /> : <XCircle size={18} />}
+                  <span style={{ fontWeight: 700, fontSize: "18px" }}>{ev.deployment_ready ? "YES" : "NO"}</span>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-6">
-              {/* Left column */}
-              <div className="col-span-1 space-y-5">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "16px" }}>
+              {/* Left */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                 {/* Model overview */}
-                <Card>
-                  <p className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-4">Model Overview</p>
-                  <div className="space-y-2.5">
-                    {[
-                      { label: "Name",         value: ev.name },
-                      { label: "Architecture", value: ev.architecture },
-                      { label: "Framework",    value: ev.framework },
-                      { label: "Dataset Type", value: ev.dataset_type?.replace("_"," ") },
-                      { label: "Task Type",    value: ev.detected_task_type },
-                      { label: "Model File",   value: ev.model_filename },
-                    ].filter(r => r.value).map(row => (
-                      <div key={row.label} className="flex justify-between py-1.5 border-b border-white/[0.04]">
-                        <span className="text-xs font-mono text-slate-500">{row.label}</span>
-                        <span className="text-xs font-mono text-slate-300 text-right max-w-[60%] truncate">{row.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
+                <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "18px" }}>
+                  <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, marginBottom: "12px" }}>Model Overview</p>
+                  {[
+                    { label: "Name",         value: ev.name },
+                    { label: "Architecture", value: ev.architecture },
+                    { label: "Framework",    value: ev.framework },
+                    { label: "Dataset Type", value: ev.dataset_type?.replace("_"," ") },
+                    { label: "Task Type",    value: ev.detected_task_type },
+                    { label: "Model File",   value: ev.model_filename },
+                  ].filter(r => r.value).map(row => (
+                    <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #111" }}>
+                      <span style={{ fontSize: "13px", color: "#94a3b8", fontFamily: MONO }}>{row.label}</span>
+                      <span style={{ fontSize: "13px", color: "#e2e8f0", fontFamily: MONO, textAlign: "right", maxWidth: "55%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
 
-                {/* Original metrics */}
-                <Card>
-                  <p className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-4">Original Metrics</p>
-                  <div className="space-y-2">
-                    {[
-                      { label: "Accuracy",  value: ev.metric_accuracy  },
-                      { label: "Precision", value: ev.metric_precision },
-                      { label: "Recall",    value: ev.metric_recall    },
-                      { label: "F1 Score",  value: ev.metric_f1        },
-                      { label: "mAP",       value: ev.metric_map       },
-                      { label: "ROC-AUC",   value: ev.metric_roc_auc   },
-                    ].filter(r => r.value !== undefined && r.value !== null).map(row => (
-                      <ConfidenceBar key={row.label} label={row.label} value={Number(row.value)} />
-                    ))}
-                  </div>
-                </Card>
+                {/* Metrics */}
+                <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "18px" }}>
+                  <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, marginBottom: "12px" }}>Original Metrics</p>
+                  {[
+                    { label: "Accuracy",  value: ev.metric_accuracy  },
+                    { label: "Precision", value: ev.metric_precision },
+                    { label: "Recall",    value: ev.metric_recall    },
+                    { label: "F1 Score",  value: ev.metric_f1        },
+                    { label: "mAP",       value: ev.metric_map       },
+                    { label: "ROC-AUC",   value: ev.metric_roc_auc   },
+                  ].filter(r => r.value != null).map(row => (
+                    <ConfidenceBar key={row.label} label={row.label} value={Number(row.value)} />
+                  ))}
+                </div>
 
                 {/* Weaknesses */}
                 {weakness?.weaknesses && (
-                  <Card>
-                    <p className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-4">Identified Weaknesses</p>
-                    <div className="space-y-2">
-                      {weakness.weaknesses.map((w: string, i: number) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <AlertTriangle size={12} className="text-amber-400 mt-0.5 flex-shrink-0" />
-                          <span className="text-xs text-slate-400">{w}</span>
-                        </div>
-                      ))}
-                    </div>
+                  <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "18px" }}>
+                    <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, marginBottom: "12px" }}>Weaknesses</p>
+                    {weakness.weaknesses.map((w: string, i: number) => (
+                      <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "8px" }}>
+                        <AlertTriangle size={11} color="#f59e0b" style={{ flexShrink: 0, marginTop: "2px" }} />
+                        <span style={{ fontSize: "13px", color: "#cbd5e1" }}>{w}</span>
+                      </div>
+                    ))}
                     {weakness.risk_factors?.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-white/[0.06]">
-                        <p className="text-[10px] font-mono text-slate-600 uppercase tracking-widest mb-2">Risk Factors</p>
+                      <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #111" }}>
+                        <p style={{ fontSize: "14px", color: "#64748b", fontFamily: MONO, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>Risk Factors</p>
                         {weakness.risk_factors.map((rf: string, i: number) => (
-                          <p key={i} className="text-xs text-slate-500 mb-1.5">• {rf}</p>
+                          <p key={i} style={{ fontSize: "13px", color: "#94a3b8", marginBottom: "4px" }}>• {rf}</p>
                         ))}
                       </div>
                     )}
-                  </Card>
+                  </div>
                 )}
               </div>
 
-              {/* Right column */}
-              <div className="col-span-2 space-y-5">
-                {/* Radar chart */}
+              {/* Right */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Radar */}
                 {radarData.length > 0 && (
-                  <Card>
-                    <p className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-4">Robustness Radar</p>
-                    <ResponsiveContainer width="100%" height={240}>
+                  <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "18px" }}>
+                    <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, marginBottom: "12px" }}>Robustness Radar</p>
+                    <ResponsiveContainer width="100%" height={220}>
                       <RadarChart data={radarData}>
-                        <PolarGrid stroke="rgba(255,255,255,0.06)" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: "#64748b", fontSize: 10 }} />
-                        <Radar name="Stressed Score" dataKey="score" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} />
+                        <PolarGrid stroke="#1a1a1a" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: "#94a3b8", fontSize: 10, fontFamily: MONO }} />
+                        <Radar name="Stressed Score" dataKey="score" stroke="#facc15" fill="#facc15" fillOpacity={0.15} />
                       </RadarChart>
                     </ResponsiveContainer>
-                  </Card>
+                  </div>
                 )}
 
-                {/* Stress results summary */}
+                {/* Stress summary */}
                 {results.length > 0 && (
-                  <Card>
-                    <div className="flex items-center justify-between mb-4">
-                      <p className="text-xs font-mono text-slate-500 uppercase tracking-widest">Stress Test Summary</p>
-                      <div className="flex items-center gap-3 text-xs font-mono">
-                        <span className="text-emerald-400">{results.filter(r=>r.passed).length} passed</span>
-                        <span className="text-red-400">{results.filter(r=>!r.passed).length} failed</span>
+                  <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "18px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+                      <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO }}>Stress Test Summary</p>
+                      <div style={{ display: "flex", gap: "12px", fontSize: "13px", fontFamily: MONO }}>
+                        <span style={{ color: "#10b981" }}>{results.filter(r=>r.passed).length} passed</span>
+                        <span style={{ color: "#ef4444" }}>{results.filter(r=>!r.passed).length} failed</span>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      {results.map(r => (
-                        <div key={r.id} className="flex items-center gap-3 py-2 border-b border-white/[0.04]">
-                          {r.passed ? <CheckCircle size={13} className="text-emerald-400 flex-shrink-0" /> : <XCircle size={13} className="text-red-400 flex-shrink-0" />}
-                          <span className="text-sm text-slate-300 flex-1">{r.stressor_label || r.stressor_key}</span>
-                          <span className="text-xs font-mono text-blue-400">{Math.round((r.original_score||0)*100)}%</span>
-                          <span className="text-xs font-mono text-slate-600">→</span>
-                          <span className={`text-xs font-mono ${r.passed ? "text-emerald-400" : "text-red-400"}`}>{Math.round((r.stressed_score||0)*100)}%</span>
-                          <span className="text-xs font-mono text-amber-400 w-14 text-right">-{r.degradation_pct?.toFixed(1)}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
+                    {results.map(r => (
+                      <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 0", borderBottom: "1px solid #111" }}>
+                        {r.passed ? <CheckCircle size={12} color="#10b981" style={{ flexShrink: 0 }} /> : <XCircle size={12} color="#ef4444" style={{ flexShrink: 0 }} />}
+                        <span style={{ fontSize: "14px", color: "#e2e8f0", flex: 1 }}>{r.stressor_label || r.stressor_key}</span>
+                        <span style={{ fontSize: "13px", color: "#3b82f6", fontFamily: MONO }}>{Math.round((r.original_score||0)*100)}%</span>
+                        <span style={{ fontSize: "13px", color: "#94a3b8", fontFamily: MONO }}>→</span>
+                        <span style={{ fontSize: "13px", fontFamily: MONO, color: r.passed ? "#10b981" : "#ef4444" }}>{Math.round((r.stressed_score||0)*100)}%</span>
+                        <span style={{ fontSize: "13px", color: "#f59e0b", fontFamily: MONO, width: "48px", textAlign: "right" }}>-{(r.degradation_pct||0).toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {/* Edge cases */}
                 {edges.length > 0 && (
-                  <Card>
-                    <p className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-4">Edge Case Analysis</p>
-                    <div className="grid grid-cols-2 gap-3">
+                  <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "18px" }}>
+                    <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, marginBottom: "12px" }}>Edge Case Analysis</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                       {edges.map((ec: any, i: number) => (
-                        <div key={i} className={`p-3 rounded-lg border ${
-                          ec.severity === "critical" ? "bg-red-500/[0.04] border-red-500/20" :
-                          ec.severity === "high"     ? "bg-amber-500/[0.04] border-amber-500/20" :
-                          "bg-white/[0.02] border-white/[0.06]"
-                        }`}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold text-slate-300">{ec.name}</span>
-                            <span className={`text-[9px] font-mono uppercase ${
-                              ec.severity === "critical" ? "text-red-400" :
-                              ec.severity === "high"     ? "text-amber-400" : "text-emerald-400"
-                            }`}>{ec.severity}</span>
+                        <div key={i} style={{
+                          padding: "10px", borderRadius: "8px",
+                          background: ec.severity==="critical" ? "#1a0000" : ec.severity==="high" ? "#1a0a00" : "#0a0a0a",
+                          border: `1px solid ${ec.severity==="critical" ? "#ef4444" : ec.severity==="high" ? "#f59e0b" : "#1a1a1a"}`,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                            <span style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }}>{ec.name}</span>
+                            <span style={{ fontSize: "14px", fontFamily: MONO, textTransform: "uppercase", color: ec.severity==="critical" ? "#ef4444" : ec.severity==="high" ? "#f59e0b" : "#10b981" }}>{ec.severity}</span>
                           </div>
-                          <p className="text-[10px] text-slate-500 leading-relaxed">{ec.description}</p>
+                          <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.5 }}>{ec.description}</p>
                         </div>
                       ))}
                     </div>
-                  </Card>
+                  </div>
                 )}
 
                 {/* Datasets */}
                 {datasets.length > 0 && (
-                  <Card>
-                    <p className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-4">
+                  <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "18px" }}>
+                    <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, marginBottom: "12px" }}>
                       Datasets Used ({datasets.length})
                     </p>
-                    <div className="space-y-2">
-                      {datasets.map(ds => (
-                        <div key={ds.id} className="flex items-center gap-3 py-2 border-b border-white/[0.04]">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold border ${
-                            ds.source === "kaggle"      ? "text-blue-400 bg-blue-500/10 border-blue-500/20" :
-                            ds.source === "huggingface" ? "text-amber-400 bg-amber-500/10 border-amber-500/20" :
-                            ds.source === "roboflow"    ? "text-violet-400 bg-violet-500/10 border-violet-500/20" :
-                            "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                          }`}>{ds.source}</span>
-                          <span className="text-sm text-slate-300 flex-1 truncate">{ds.dataset_name}</span>
-                          <span className="text-xs font-mono text-slate-600">{ds.sample_count?.toLocaleString()} samples</span>
+                    {datasets.map(ds => {
+                      const srcColor: Record<string,string> = { kaggle:"#3b82f6", huggingface:"#f59e0b", roboflow:"#a855f7", synthetic:"#10b981" };
+                      const c = srcColor[ds.source] || "#cbd5e1";
+                      return (
+                        <div key={ds.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "7px 0", borderBottom: "1px solid #111" }}>
+                          <span style={{ padding: "2px 8px", borderRadius: "4px", background: "#111", border: `1px solid ${c}`, fontSize: "14px", fontFamily: MONO, color: c, flexShrink: 0 }}>{ds.source}</span>
+                          <span style={{ fontSize: "14px", color: "#e2e8f0", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.dataset_name}</span>
+                          <span style={{ fontSize: "13px", color: "#94a3b8", fontFamily: MONO, flexShrink: 0 }}>{ds.sample_count?.toLocaleString()} samples</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Augmentation comparison summary */}
+                {ev.augmentation_comparison && (
+                  <div style={{ background: "#0a0a0a", border: "2px solid #facc15", borderRadius: "12px", padding: "18px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
+                      <TrendingUp size={15} color="#facc15" />
+                      <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, fontWeight: 700 }}>
+                        Augmentation Impact
+                      </p>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "14px" }}>
+                      {[
+                        { label: "Before", value: `${ev.augmentation_comparison.before_avg_accuracy}%`, color: "#ef4444" },
+                        { label: "After",  value: `${ev.augmentation_comparison.after_avg_accuracy}%`,  color: "#10b981" },
+                        { label: "Gain",   value: `+${ev.augmentation_comparison.accuracy_gain}%`,       color: "#facc15" },
+                      ].map(c => (
+                        <div key={c.label} style={{ background: "#111", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
+                          <p style={{ fontSize: "10px", color: "#64748b", fontFamily: MONO, textTransform: "uppercase", marginBottom: "4px" }}>{c.label}</p>
+                          <p style={{ fontSize: "18px", fontWeight: 700, color: c.color, fontFamily: MONO }}>{c.value}</p>
                         </div>
                       ))}
                     </div>
-                  </Card>
+                    <div style={{ background: "#111", borderRadius: "8px", padding: "12px", marginBottom: "10px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "11px", color: "#64748b", fontFamily: MONO }}>Current Robustness</span>
+                        <span style={{ fontSize: "11px", color: "#ef4444", fontFamily: MONO, fontWeight: 700 }}>{ev.augmentation_comparison.current_robustness}%</span>
+                      </div>
+                      <div style={{ height: "5px", background: "#1a1a1a", borderRadius: "9999px", overflow: "hidden", marginBottom: "8px" }}>
+                        <div style={{ height: "100%", background: "#ef4444", width: `${ev.augmentation_comparison.current_robustness}%` }} />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "11px", color: "#64748b", fontFamily: MONO }}>Projected After Augmentation</span>
+                        <span style={{ fontSize: "11px", color: "#10b981", fontFamily: MONO, fontWeight: 700 }}>{ev.augmentation_comparison.projected_robustness}%</span>
+                      </div>
+                      <div style={{ height: "5px", background: "#1a1a1a", borderRadius: "9999px", overflow: "hidden" }}>
+                        <div style={{ height: "100%", background: "#10b981", width: `${ev.augmentation_comparison.projected_robustness}%` }} />
+                      </div>
+                    </div>
+                    <p style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.6 }}>
+                      {ev.augmentation_comparison.recommendation}
+                    </p>
+                    <button
+                      onClick={() => navigate(`/evaluations/${id}/stress`)}
+                      style={{ marginTop: "12px", background: "none", border: "1px solid #facc15", borderRadius: "6px", padding: "6px 14px", color: "#facc15", fontSize: "12px", fontFamily: MONO, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                      View Full Comparison <TrendingUp size={12} />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

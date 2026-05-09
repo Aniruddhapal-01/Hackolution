@@ -142,6 +142,7 @@ class EvaluationResponse(BaseModel):
     fetched_datasets: Optional[Any]
     total_test_samples: int
     stress_results: Optional[Any]
+    augmentation_comparison: Optional[Any]
     robustness_score: Optional[float]
     risk_level: Optional[str]
     deployment_ready: Optional[bool]
@@ -343,6 +344,8 @@ def _run_full_pipeline(evaluation_id: str):
             framework=ev.framework,
             metrics=metrics,
             progress_callback=analysis_progress,
+            name=ev.name,
+            description=ev.description,
         )
 
         _update_eval(
@@ -367,19 +370,28 @@ def _run_full_pipeline(evaluation_id: str):
             dataset_type=dataset_type,
             vulnerability_vector=analysis.get("vulnerability_vector", {}),
             progress_callback=fetch_progress,
+            image_domain=analysis.get("image_domain", "general"),
         )
 
-        # Persist dataset records
+        # Persist dataset records — handle both old and new field names
         db2 = SessionLocal()
         try:
             for ds in datasets:
+                if not ds:
+                    continue
+                # New service returns dataset_url/size_bytes/sample_count
+                # Old service returned url/size_mb/samples — support both
+                url        = ds.get("dataset_url") or ds.get("url", "")
+                size_bytes = ds.get("size_bytes") or int(ds.get("size_mb", 0) * 1024 * 1024)
+                samples    = ds.get("sample_count") or ds.get("samples", 0)
+                name       = ds.get("name", "")
                 record = DatasetRecord(
                     evaluation_id=evaluation_id,
                     source=ds.get("source", "unknown"),
-                    dataset_name=ds.get("name"),
-                    dataset_url=ds.get("url"),
-                    size_bytes=int(ds.get("size_mb", 0) * 1024 * 1024),
-                    sample_count=ds.get("samples"),
+                    dataset_name=name,
+                    dataset_url=url,
+                    size_bytes=int(size_bytes),
+                    sample_count=int(samples),
                     target_stressor=ds.get("target_stressor"),
                     description=ds.get("description"),
                 )
@@ -388,7 +400,9 @@ def _run_full_pipeline(evaluation_id: str):
         finally:
             db2.close()
 
-        total_samples = sum(ds.get("samples", 0) for ds in datasets)
+        total_samples = sum(
+            (ds.get("sample_count") or ds.get("samples", 0)) for ds in datasets if ds
+        )
         _update_eval(
             evaluation_id,
             progress=50,
@@ -445,6 +459,7 @@ def _run_full_pipeline(evaluation_id: str):
             progress=85,
             current_stage="Stress tests complete — generating report",
             stress_results=stress_output.get("stress_results"),
+            augmentation_comparison=stress_output.get("augmentation_comparison"),
             robustness_score=stress_output.get("robustness_score"),
             risk_level=risk_level_enum,
             deployment_ready=stress_output.get("deployment_ready"),
@@ -543,24 +558,71 @@ def get_status(evaluation_id: str, db: Session = Depends(get_db)):
 # ─── Report download ──────────────────────────────────────────────────────────
 
 @app.get("/api/evaluations/{evaluation_id}/report")
-def download_report(evaluation_id: str, db: Session = Depends(get_db)):
-    """Stream the CSV report for download."""
+def download_report(evaluation_id: str, fmt: str = "pdf", db: Session = Depends(get_db)):
+    """Download the evaluation report. fmt=pdf (default) or fmt=docx"""
     ev = _get_eval_or_404(evaluation_id, db)
     if ev.status != EvaluationStatus.READY:
         raise HTTPException(status_code=400, detail="Report not ready yet")
 
-    csv_path = os.path.join(DATA_DIR, f"reports/{evaluation_id}/summary.csv")
-    if not os.path.exists(csv_path):
-        raise HTTPException(status_code=404, detail="Report file not found")
+    ext      = "docx" if fmt == "docx" else "pdf"
+    mime     = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if ext == "docx" else "application/pdf"
+    # Sanitize filename — strip any non-ASCII characters that break latin-1 HTTP headers
+    safe_name = "".join(c if ord(c) < 128 else "_" for c in ev.name).replace(" ", "_")
+    filename = f"BlindSpot_Report_{safe_name}_{datetime.now().strftime('%Y%m%d')}.{ext}"
+    fpath    = os.path.join(DATA_DIR, f"reports/{evaluation_id}/report.{ext}")
 
-    with open(csv_path, "r") as f:
-        content = f.read()
+    # Regenerate if file missing (e.g. old evaluation)
+    if not os.path.exists(fpath):
+        try:
+            from services.report_generation_service import generate_report
+            from models import StressTestResult as STR, DatasetRecord as DR
+            db2 = __import__("models").SessionLocal()
+            ev2 = db2.query(ModelEvaluation).filter(ModelEvaluation.id == evaluation_id).first()
+            stress  = [{"stressor_key": r.stressor_key, "stressor_label": r.stressor_label,
+                        "original_score": r.original_score, "stressed_score": r.stressed_score,
+                        "degradation_pct": r.degradation_pct, "confidence_stability": r.confidence_stability,
+                        "sample_count": r.sample_count, "passed": r.passed, "notes": r.notes}
+                       for r in db2.query(STR).filter(STR.evaluation_id == evaluation_id).all()]
+            datasets= [{"source": d.source, "name": d.dataset_name, "sample_count": d.sample_count,
+                        "samples": d.sample_count}
+                       for d in db2.query(DR).filter(DR.evaluation_id == evaluation_id).all()]
+            db2.close()
+            report_data = {
+                "name": ev2.name, "architecture": ev2.architecture, "framework": ev2.framework,
+                "dataset_type": ev2.dataset_type, "model_filename": ev2.model_filename,
+                "model_size_bytes": ev2.model_size_bytes,
+                "original_metrics": {"accuracy": ev2.metric_accuracy, "precision": ev2.metric_precision,
+                                     "recall": ev2.metric_recall, "f1": ev2.metric_f1,
+                                     "map": ev2.metric_map, "roc_auc": ev2.metric_roc_auc},
+                "detected_task_type": ev2.detected_task_type, "domain": None,
+                "scope_summary": ev2.scope_summary,
+                "edge_case_analysis": ev2.edge_case_analysis or [],
+                "weakness_report": ev2.weakness_report or {},
+                "fetched_datasets": datasets,
+                "stress_results": stress,
+                "robustness_score": ev2.robustness_score,
+                "risk_level": str(ev2.risk_level or "high"),
+                "deployment_ready": ev2.deployment_ready,
+            }
+            generate_report(evaluation_id, report_data)
+        except Exception as e:
+            logger.error(f"[Report regen] {e}")
 
-    filename = f"BlindSpot_Report_{ev.name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv"
+    if not os.path.exists(fpath):
+        raise HTTPException(status_code=404, detail=f"Report file not found. Try re-running the evaluation.")
+
+    def iter_file():
+        with open(fpath, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+
     return StreamingResponse(
-        iter([content]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        iter_file(),
+        media_type=mime,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Length": str(os.path.getsize(fpath)),
+        },
     )
 
 
@@ -574,7 +636,152 @@ def brainstorm_edge_cases(evaluation_id: str, db: Session = Depends(get_db)):
     return {"scenarios": scenarios}
 
 
+# ─── Dataset direct download ──────────────────────────────────────────────────
+
+@app.get("/api/evaluations/{evaluation_id}/datasets/{dataset_id}/download")
+def download_dataset(evaluation_id: str, dataset_id: str, db: Session = Depends(get_db)):
+    """
+    Stream a generated synthetic dataset ZIP directly.
+    Bypasses the static file server — works for any path under DATA_DIR.
+    """
+    from models import DatasetRecord as DR
+    record = db.query(DR).filter(
+        DR.id == dataset_id,
+        DR.evaluation_id == evaluation_id,
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Dataset record not found")
+
+    if not record.dataset_url:
+        raise HTTPException(status_code=404, detail="No download URL for this dataset")
+
+    # Resolve local path from URL
+    url = record.dataset_url
+    if url.startswith("http://localhost:8000/media/"):
+        rel = url.replace("http://localhost:8000/media/", "")
+        local_path = os.path.join(DATA_DIR, rel.replace("/", os.sep))
+    elif os.path.exists(url):
+        local_path = url
+    else:
+        # It's an external URL — redirect
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+
+    if not os.path.exists(local_path):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset file not found on disk. Re-run the evaluation to regenerate."
+        )
+
+    filename = os.path.basename(local_path)
+    file_size = os.path.getsize(local_path)
+
+    def iter_file():
+        with open(local_path, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+
+    return StreamingResponse(
+        iter_file(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Length": str(file_size),
+        },
+    )
+
+
+@app.post("/api/evaluations/{evaluation_id}/regenerate-datasets")
+def regenerate_datasets(
+    evaluation_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Re-generate synthetic datasets for an existing completed evaluation.
+    Useful when the old evaluation used the legacy service with fake URLs.
+    """
+    ev = _get_eval_or_404(evaluation_id, db)
+
+    def _regen(eid: str):
+        from models import SessionLocal as SL, DatasetRecord as DR
+        from services.dataset_fetch_service import fetch_datasets
+
+        db_r = SL()
+        try:
+            ev_r = db_r.query(ModelEvaluation).filter(ModelEvaluation.id == eid).first()
+            if not ev_r or not ev_r.vulnerability_vector:
+                return
+
+            dataset_type = ev_r.dataset_type or "image"
+            vuln_vec = ev_r.vulnerability_vector or {}
+
+            # Delete old dataset records
+            db_r.query(DR).filter(DR.evaluation_id == eid).delete()
+            db_r.commit()
+
+            datasets = fetch_datasets(
+                evaluation_id=eid,
+                dataset_type=dataset_type,
+                vulnerability_vector=vuln_vec,
+            )
+
+            for ds in datasets:
+                if not ds:
+                    continue
+                url        = ds.get("dataset_url") or ds.get("url", "")
+                size_bytes = ds.get("size_bytes") or int(ds.get("size_mb", 0) * 1024 * 1024)
+                samples    = ds.get("sample_count") or ds.get("samples", 0)
+                record = DR(
+                    evaluation_id=eid,
+                    source=ds.get("source", "unknown"),
+                    dataset_name=ds.get("name", ""),
+                    dataset_url=url,
+                    size_bytes=int(size_bytes),
+                    sample_count=int(samples),
+                    target_stressor=ds.get("target_stressor"),
+                    description=ds.get("description"),
+                )
+                db_r.add(record)
+            db_r.commit()
+            logger.info(f"[Regen] Datasets regenerated for {eid}: {len(datasets)} records")
+        except Exception as e:
+            logger.error(f"[Regen] Failed for {eid}: {e}")
+        finally:
+            db_r.close()
+
+    background_tasks.add_task(_regen, evaluation_id)
+    return {"message": "Dataset regeneration started", "evaluation_id": evaluation_id}
+
+
 # ─── Stressors reference ──────────────────────────────────────────────────────
+
+@app.get("/api/evaluations/{evaluation_id}/dataset-quality")
+def get_dataset_quality(evaluation_id: str, db: Session = Depends(get_db)):
+    """
+    Evaluate the quality / accuracy of the datasets generated for this evaluation.
+    Returns an overall accuracy score (0-100) and per-stressor breakdown across
+    4 dimensions: stressor fidelity, label correctness, distribution shift, coverage.
+    """
+    from services.dataset_quality_evaluator import evaluate_dataset_quality
+    ev = _get_eval_or_404(evaluation_id, db)
+
+    if not ev.vulnerability_vector:
+        raise HTTPException(
+            status_code=400,
+            detail="No vulnerability vector found. Run the evaluation pipeline first."
+        )
+
+    dataset_type = ev.dataset_type or "image"
+    vuln_vector  = ev.vulnerability_vector if isinstance(ev.vulnerability_vector, dict) else {}
+
+    result = evaluate_dataset_quality(
+        evaluation_id=evaluation_id,
+        dataset_type=dataset_type,
+        vulnerability_vector=vuln_vector,
+    )
+    return result
+
 
 @app.get("/api/stressors")
 def list_stressors():

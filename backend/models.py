@@ -102,6 +102,7 @@ class ModelEvaluation(Base):
 
     # ── Stress test results ────────────────────────────────────────────────
     stress_results          = Column(JSON, nullable=True)          # per-stressor metrics
+    augmentation_comparison = Column(JSON, nullable=True)          # before/after dataset augmentation comparison
     robustness_score        = Column(Float, nullable=True)         # 0-100
     risk_level              = Column(Enum(RiskLevel), nullable=True)
     deployment_ready        = Column(Boolean, nullable=True)

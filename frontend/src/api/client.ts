@@ -82,6 +82,27 @@ export interface Evaluation {
   fetched_datasets?: any[];
   total_test_samples: number;
   stress_results?: StressTestResult[];
+  augmentation_comparison?: {
+    per_stressor: Array<{
+      stressor_key: string;
+      stressor_label: string;
+      before_score: number;
+      after_score: number;
+      improvement_abs: number;
+      improvement_pct: number;
+      was_failing: boolean;
+      now_passing: boolean;
+    }>;
+    before_avg_accuracy: number;
+    after_avg_accuracy: number;
+    accuracy_gain: number;
+    before_passing: number;
+    after_passing: number;
+    tests_recovered: number;
+    projected_robustness: number;
+    current_robustness: number;
+    recommendation: string;
+  };
   robustness_score?: number;
   risk_level?: RiskLevel;
   deployment_ready?: boolean;
