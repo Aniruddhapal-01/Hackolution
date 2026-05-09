@@ -317,9 +317,28 @@ export default function LandingPage() {
           <button className="nav-link" onClick={() => navigate("/docs")}>Docs</button>
           <button className="nav-link" onClick={() => navigate("/pricing")}>Pricing</button>
           <button className="nav-link" onClick={() => navigate("/evaluations")}>Dashboard</button>
-          <StyledButton onClick={() => navigate("/evaluations")}>
-            <div><span>Get Started <ArrowRight size={14} /></span></div>
-          </StyledButton>
+          <button
+            onClick={() => navigate("/evaluations")}
+            style={{
+              background: "#facc15",
+              color: "#000",
+              border: "none",
+              borderRadius: "9999px",
+              padding: "6px 16px",
+              fontFamily: "'Google Sans', sans-serif",
+              fontWeight: 700,
+              fontSize: "13px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              transition: "opacity 150ms",
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "0.85"}
+            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+          >
+            Get Started <ArrowRight size={13} />
+          </button>
         </NavLinks>
       </Nav>
 

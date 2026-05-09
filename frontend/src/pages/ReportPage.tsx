@@ -1,9 +1,9 @@
 import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { FileText, Download, CheckCircle, XCircle, AlertTriangle, ArrowLeft, Loader2, Shield } from "lucide-react";
+import { FileText, Download, CheckCircle, XCircle, AlertTriangle, ArrowLeft, Loader2, Shield, TrendingUp } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import TopNavBar from "../components/TopNavBar";
-import { StatusBadge, RiskBadge, MetricCard, Button, ConfidenceBar, C, FONT, MONO } from "../components/ui";
+import { StatusBadge, RiskBadge, MetricCard, Button, ConfidenceBar, FONT, MONO } from "../components/ui";
 import { useEvaluation, useEvaluations } from "../hooks/useProject";
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from "recharts";
 
@@ -235,6 +235,54 @@ export default function ReportPage() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* Augmentation comparison summary */}
+                {ev.augmentation_comparison && (
+                  <div style={{ background: "#0a0a0a", border: "2px solid #facc15", borderRadius: "12px", padding: "18px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
+                      <TrendingUp size={15} color="#facc15" />
+                      <p style={{ fontSize: "13px", color: "#facc15", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO, fontWeight: 700 }}>
+                        Augmentation Impact
+                      </p>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "14px" }}>
+                      {[
+                        { label: "Before", value: `${ev.augmentation_comparison.before_avg_accuracy}%`, color: "#ef4444" },
+                        { label: "After",  value: `${ev.augmentation_comparison.after_avg_accuracy}%`,  color: "#10b981" },
+                        { label: "Gain",   value: `+${ev.augmentation_comparison.accuracy_gain}%`,       color: "#facc15" },
+                      ].map(c => (
+                        <div key={c.label} style={{ background: "#111", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
+                          <p style={{ fontSize: "10px", color: "#64748b", fontFamily: MONO, textTransform: "uppercase", marginBottom: "4px" }}>{c.label}</p>
+                          <p style={{ fontSize: "18px", fontWeight: 700, color: c.color, fontFamily: MONO }}>{c.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ background: "#111", borderRadius: "8px", padding: "12px", marginBottom: "10px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "11px", color: "#64748b", fontFamily: MONO }}>Current Robustness</span>
+                        <span style={{ fontSize: "11px", color: "#ef4444", fontFamily: MONO, fontWeight: 700 }}>{ev.augmentation_comparison.current_robustness}%</span>
+                      </div>
+                      <div style={{ height: "5px", background: "#1a1a1a", borderRadius: "9999px", overflow: "hidden", marginBottom: "8px" }}>
+                        <div style={{ height: "100%", background: "#ef4444", width: `${ev.augmentation_comparison.current_robustness}%` }} />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "11px", color: "#64748b", fontFamily: MONO }}>Projected After Augmentation</span>
+                        <span style={{ fontSize: "11px", color: "#10b981", fontFamily: MONO, fontWeight: 700 }}>{ev.augmentation_comparison.projected_robustness}%</span>
+                      </div>
+                      <div style={{ height: "5px", background: "#1a1a1a", borderRadius: "9999px", overflow: "hidden" }}>
+                        <div style={{ height: "100%", background: "#10b981", width: `${ev.augmentation_comparison.projected_robustness}%` }} />
+                      </div>
+                    </div>
+                    <p style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.6 }}>
+                      {ev.augmentation_comparison.recommendation}
+                    </p>
+                    <button
+                      onClick={() => navigate(`/evaluations/${id}/stress`)}
+                      style={{ marginTop: "12px", background: "none", border: "1px solid #facc15", borderRadius: "6px", padding: "6px 14px", color: "#facc15", fontSize: "12px", fontFamily: MONO, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                      View Full Comparison <TrendingUp size={12} />
+                    </button>
                   </div>
                 )}
               </div>

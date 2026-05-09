@@ -1,11 +1,11 @@
 import React, { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Upload, Play, AlertTriangle, CheckCircle, Cpu, FileText, Zap, Loader2, RefreshCw } from "lucide-react";
+import { Upload, Play, AlertTriangle, CheckCircle, Cpu, FileText, Zap, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import TopNavBar from "../components/TopNavBar";
 import { StatusBadge, RiskBadge, ProgressBar, PipelineSteps, Button, MetricCard, Card, ConfidenceBar, C, FONT, MONO } from "../components/ui";
 import { useEvaluation, useEvaluations } from "../hooks/useProject";
-import { uploadModel, runEvaluation, ACTIVE_STATUSES } from "../api/client";
+import { uploadModel, runEvaluation, deleteEvaluation, ACTIVE_STATUSES } from "../api/client";
 
 export default function EvaluationPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +16,7 @@ export default function EvaluationPage() {
   const [uploadPct, setUploadPct] = useState(0);
   const [running, setRunning]     = useState(false);
   const [dragOver, setDragOver]   = useState(false);
+  const [deleting, setDeleting]   = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -32,6 +33,19 @@ export default function EvaluationPage() {
     try { await runEvaluation(id); await refetch(); }
     catch (e: any) { alert(e?.response?.data?.detail || "Failed to start pipeline"); }
     finally { setRunning(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    if (!window.confirm(`Delete "${evaluation?.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await deleteEvaluation(id);
+      navigate("/evaluations");
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Delete failed");
+      setDeleting(false);
+    }
   };
 
   if (loading) return (
@@ -83,6 +97,9 @@ export default function EvaluationPage() {
             )}
             <Button onClick={handleRun} variant="primary" size="sm" disabled={!canRun || running} loading={running}>
               <Play size={13} /> {isActive ? "Running..." : ev.status === "ready" ? "Re-run" : "Run Evaluation"}
+            </Button>
+            <Button onClick={handleDelete} variant="danger" size="sm" loading={deleting} disabled={isActive}>
+              <Trash2 size={13} /> Delete
             </Button>
           </div>
         </div>

@@ -17,14 +17,14 @@ const sections = [
   { id: "formats",       label: "Supported Formats",  icon: <Terminal size={14} /> },
 ];
 
-function CodeBlock({ code }: { code: string }) {
+function CodeBlock({ code, children }: { code?: string; children?: React.ReactNode }) {
   return (
     <pre style={{
       background: "#0f0f0f", border: "1px solid #2d2d2d", borderRadius: "10px",
       padding: "16px 20px", fontFamily: MONO, fontSize: "13px", color: "#e2e8f0",
       overflowX: "auto", lineHeight: 1.7, margin: "12px 0",
     }}>
-      <code>{code}</code>
+      <code>{code ?? children}</code>
     </pre>
   );
 }

@@ -142,6 +142,7 @@ class EvaluationResponse(BaseModel):
     fetched_datasets: Optional[Any]
     total_test_samples: int
     stress_results: Optional[Any]
+    augmentation_comparison: Optional[Any]
     robustness_score: Optional[float]
     risk_level: Optional[str]
     deployment_ready: Optional[bool]
@@ -343,6 +344,8 @@ def _run_full_pipeline(evaluation_id: str):
             framework=ev.framework,
             metrics=metrics,
             progress_callback=analysis_progress,
+            name=ev.name,
+            description=ev.description,
         )
 
         _update_eval(
@@ -367,6 +370,7 @@ def _run_full_pipeline(evaluation_id: str):
             dataset_type=dataset_type,
             vulnerability_vector=analysis.get("vulnerability_vector", {}),
             progress_callback=fetch_progress,
+            image_domain=analysis.get("image_domain", "general"),
         )
 
         # Persist dataset records — handle both old and new field names
@@ -455,6 +459,7 @@ def _run_full_pipeline(evaluation_id: str):
             progress=85,
             current_stage="Stress tests complete — generating report",
             stress_results=stress_output.get("stress_results"),
+            augmentation_comparison=stress_output.get("augmentation_comparison"),
             robustness_score=stress_output.get("robustness_score"),
             risk_level=risk_level_enum,
             deployment_ready=stress_output.get("deployment_ready"),
@@ -750,6 +755,33 @@ def regenerate_datasets(
 
 
 # ─── Stressors reference ──────────────────────────────────────────────────────
+
+@app.get("/api/evaluations/{evaluation_id}/dataset-quality")
+def get_dataset_quality(evaluation_id: str, db: Session = Depends(get_db)):
+    """
+    Evaluate the quality / accuracy of the datasets generated for this evaluation.
+    Returns an overall accuracy score (0-100) and per-stressor breakdown across
+    4 dimensions: stressor fidelity, label correctness, distribution shift, coverage.
+    """
+    from services.dataset_quality_evaluator import evaluate_dataset_quality
+    ev = _get_eval_or_404(evaluation_id, db)
+
+    if not ev.vulnerability_vector:
+        raise HTTPException(
+            status_code=400,
+            detail="No vulnerability vector found. Run the evaluation pipeline first."
+        )
+
+    dataset_type = ev.dataset_type or "image"
+    vuln_vector  = ev.vulnerability_vector if isinstance(ev.vulnerability_vector, dict) else {}
+
+    result = evaluate_dataset_quality(
+        evaluation_id=evaluation_id,
+        dataset_type=dataset_type,
+        vulnerability_vector=vuln_vector,
+    )
+    return result
+
 
 @app.get("/api/stressors")
 def list_stressors():
