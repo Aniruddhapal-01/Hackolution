@@ -72,6 +72,7 @@ class EvaluationCreate(BaseModel):
     framework: Optional[str] = None
     embedding_dim: Optional[int] = None
     input_size: Optional[str] = None
+    image_domain_override: Optional[str] = None   # medical/satellite/autonomous/drone/general
     metric_accuracy: Optional[float] = None
     metric_precision: Optional[float] = None
     metric_recall: Optional[float] = None
@@ -130,6 +131,7 @@ class EvaluationResponse(BaseModel):
     metric_roc_auc: Optional[float]
     model_filename: Optional[str]
     model_size_bytes: Optional[int]
+    image_domain_override: Optional[str]
     status: str
     progress: int
     current_stage: Optional[str]
@@ -205,6 +207,7 @@ def create_evaluation(body: EvaluationCreate, db: Session = Depends(get_db)):
         framework=body.framework,
         embedding_dim=body.embedding_dim,
         input_size=body.input_size,
+        image_domain_override=body.image_domain_override,
         metric_accuracy=body.metric_accuracy,
         metric_precision=body.metric_precision,
         metric_recall=body.metric_recall,
@@ -256,7 +259,85 @@ def patch_evaluation(evaluation_id: str, payload: dict, db: Session = Depends(ge
     return {"updated": True}
 
 
-# ─── Step 1: Model Upload ─────────────────────────────────────────────────────
+# ─── Seed Image Upload ────────────────────────────────────────────────────────
+
+@app.post("/api/evaluations/{evaluation_id}/upload-seed-images")
+async def upload_seed_images(
+    evaluation_id: str,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Upload seed images for an image evaluation.
+    These images are used as base images for all synthetic dataset generation —
+    stressors (fog, rain, noise, etc.) are applied on top of them.
+    Accepts: .jpg .jpeg .png .bmp .webp — up to 20 images, 10 MB each.
+    """
+    ev = _get_eval_or_404(evaluation_id, db)
+
+    ALLOWED_IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    MAX_IMG_MB = 10
+
+    seed_dir = Path(DATA_DIR) / "seed_images" / evaluation_id
+    seed_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_paths = []
+    for f in files[:20]:   # cap at 20 seed images
+        ext = Path(f.filename).suffix.lower()
+        if ext not in ALLOWED_IMG_EXT:
+            continue
+        data = await f.read()
+        if len(data) > MAX_IMG_MB * 1024 * 1024:
+            continue
+        # Sanitize filename
+        safe_name = f"{uuid.uuid4().hex[:8]}{ext}"
+        dest = seed_dir / safe_name
+        dest.write_bytes(data)
+        saved_paths.append(str(dest))
+
+    if not saved_paths:
+        raise HTTPException(status_code=400, detail="No valid image files uploaded. Accepted: .jpg .jpeg .png .bmp .webp")
+
+    import json as _json
+    ev.seed_image_paths = _json.dumps(saved_paths)
+    db.commit()
+
+    logger.info(f"[SeedImages] {len(saved_paths)} seed images saved for {evaluation_id}")
+    return {
+        "evaluation_id": evaluation_id,
+        "saved_count":   len(saved_paths),
+        "message":       f"{len(saved_paths)} seed image(s) saved. They will be used as base images for all dataset generation.",
+    }
+
+
+@app.get("/api/evaluations/{evaluation_id}/seed-images")
+def get_seed_images(evaluation_id: str, db: Session = Depends(get_db)):
+    """Return info about uploaded seed images for an evaluation."""
+    import json as _json
+    ev = _get_eval_or_404(evaluation_id, db)
+    paths = _json.loads(ev.seed_image_paths) if ev.seed_image_paths else []
+    return {
+        "evaluation_id": evaluation_id,
+        "count":         len(paths),
+        "has_seeds":     len(paths) > 0,
+        "filenames":     [Path(p).name for p in paths],
+    }
+
+
+@app.delete("/api/evaluations/{evaluation_id}/seed-images")
+def delete_seed_images(evaluation_id: str, db: Session = Depends(get_db)):
+    """Remove all seed images for an evaluation (revert to procedural generation)."""
+    import json as _json, shutil
+    ev = _get_eval_or_404(evaluation_id, db)
+    seed_dir = Path(DATA_DIR) / "seed_images" / evaluation_id
+    if seed_dir.exists():
+        shutil.rmtree(seed_dir)
+    ev.seed_image_paths = None
+    db.commit()
+    return {"message": "Seed images removed. Procedural generation will be used."}
+
+
+
 
 @app.post("/api/evaluations/{evaluation_id}/upload-model")
 async def upload_model(
@@ -328,6 +409,11 @@ def _run_full_pipeline(evaluation_id: str):
             "map":       ev.metric_map,
             "roc_auc":   ev.metric_roc_auc,
         }
+        # Use user-specified domain override if provided, else auto-detect
+        domain_override = ev.image_domain_override or None
+        # Load seed image paths if any were uploaded
+        import json as _json
+        seed_images = _json.loads(ev.seed_image_paths) if ev.seed_image_paths else []
         db.close()
 
         # ── STAGE 1: Model Analysis ──────────────────────────────────────
@@ -346,6 +432,7 @@ def _run_full_pipeline(evaluation_id: str):
             progress_callback=analysis_progress,
             name=ev.name,
             description=ev.description,
+            domain_override=domain_override,
         )
 
         _update_eval(
@@ -370,7 +457,8 @@ def _run_full_pipeline(evaluation_id: str):
             dataset_type=dataset_type,
             vulnerability_vector=analysis.get("vulnerability_vector", {}),
             progress_callback=fetch_progress,
-            image_domain=analysis.get("image_domain", "general"),
+            image_domain=domain_override or analysis.get("image_domain", "general"),
+            seed_images=seed_images,
         )
 
         # Persist dataset records — handle both old and new field names
@@ -781,6 +869,101 @@ def get_dataset_quality(evaluation_id: str, db: Session = Depends(get_db)):
         vulnerability_vector=vuln_vector,
     )
     return result
+
+
+@app.post("/api/evaluations/{evaluation_id}/generate-improvement-datasets")
+def generate_improvement_datasets(
+    evaluation_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Generate training improvement datasets for all failed stressors.
+    These datasets help the model learn to handle its detected edge cases.
+    """
+    ev = _get_eval_or_404(evaluation_id, db)
+
+    if ev.status != EvaluationStatus.READY:
+        raise HTTPException(status_code=400, detail="Run the evaluation pipeline first.")
+
+    def _gen_improvement(eid: str):
+        from models import SessionLocal as SL, StressTestResult as STR
+        from services.improvement_dataset_service import generate_improvement_datasets as gen_imp
+
+        db_r = SL()
+        try:
+            ev_r = db_r.query(ModelEvaluation).filter(ModelEvaluation.id == eid).first()
+            if not ev_r:
+                return
+
+            stress_results = [
+                {
+                    "stressor_key":  r.stressor_key,
+                    "stressor_label": r.stressor_label,
+                    "degradation_pct": r.degradation_pct,
+                    "passed": r.passed,
+                }
+                for r in db_r.query(STR).filter(STR.evaluation_id == eid).all()
+            ]
+
+            vuln_vector  = ev_r.vulnerability_vector or {}
+            dataset_type = ev_r.dataset_type or "tabular"
+
+            datasets = gen_imp(
+                evaluation_id=eid,
+                dataset_type=dataset_type,
+                stress_results=stress_results,
+                vulnerability_vector=vuln_vector,
+            )
+
+            # Store as dataset records with source="improvement"
+            from models import DatasetRecord as DR
+            for ds in datasets:
+                if not ds:
+                    continue
+                record = DR(
+                    evaluation_id=eid,
+                    source="improvement",
+                    dataset_name=ds.get("name", ""),
+                    dataset_url=ds.get("dataset_url", ""),
+                    size_bytes=int(ds.get("size_bytes", 0)),
+                    sample_count=int(ds.get("samples", 0)),
+                    target_stressor=ds.get("target_stressor"),
+                    description=ds.get("description"),
+                )
+                db_r.add(record)
+            db_r.commit()
+            logger.info(f"[ImprovementDatasets] Generated {len(datasets)} datasets for {eid}")
+        except Exception as e:
+            logger.error(f"[ImprovementDatasets] Failed for {eid}: {e}", exc_info=True)
+        finally:
+            db_r.close()
+
+    background_tasks.add_task(_gen_improvement, evaluation_id)
+    return {"message": "Improvement dataset generation started", "evaluation_id": evaluation_id}
+
+
+@app.get("/api/evaluations/{evaluation_id}/improvement-datasets")
+def get_improvement_datasets(evaluation_id: str, db: Session = Depends(get_db)):
+    """Return all improvement datasets for an evaluation."""
+    from models import DatasetRecord as DR
+    records = db.query(DR).filter(
+        DR.evaluation_id == evaluation_id,
+        DR.source == "improvement",
+    ).all()
+    return [
+        {
+            "id":              r.id,
+            "name":            r.dataset_name,
+            "dataset_url":     r.dataset_url,
+            "size_bytes":      r.size_bytes,
+            "sample_count":    r.sample_count,
+            "target_stressor": r.target_stressor,
+            "description":     r.description,
+            "source":          r.source,
+        }
+        for r in records
+    ]
 
 
 @app.get("/api/stressors")

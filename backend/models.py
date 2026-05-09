@@ -68,6 +68,8 @@ class ModelEvaluation(Base):
     framework       = Column(String(100), nullable=True)           # pytorch / tensorflow / sklearn
     embedding_dim   = Column(Integer, nullable=True)
     input_size      = Column(String(100), nullable=True)           # e.g. "224x224" or "512"
+    image_domain_override = Column(String(50), nullable=True)      # user override: medical/satellite/autonomous/drone/general
+    seed_image_paths      = Column(Text, nullable=True)            # JSON list of saved seed image paths
 
     # ── Existing metrics (from Step 1 form) ────────────────────────────────
     metric_accuracy = Column(Float, nullable=True)

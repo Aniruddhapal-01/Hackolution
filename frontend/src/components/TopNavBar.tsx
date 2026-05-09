@@ -9,11 +9,12 @@ export default function TopNavBar({ evaluationId, projectId }: TopNavBarProps) {
   const path = useLocation().pathname;
 
   const navItems = [
-    { label: "Dashboard",   href: "/evaluations",                           active: path === "/evaluations" },
-    { label: "Analysis",    href: id ? `/evaluations/${id}` : null,         active: id ? path === `/evaluations/${id}` : false },
-    { label: "Stress Test", href: id ? `/evaluations/${id}/stress` : null,  active: id ? path.includes("/stress") : false },
-    { label: "Datasets",    href: id ? `/evaluations/${id}/datasets` : null,active: id ? path.includes("/datasets") : false },
-    { label: "Report",      href: id ? `/evaluations/${id}/report` : null,  active: id ? path.includes("/report") : false },
+    { label: "Dashboard",    href: "/evaluations",                                active: path === "/evaluations" },
+    { label: "Analysis",     href: id ? `/evaluations/${id}` : null,              active: id ? path === `/evaluations/${id}` : false },
+    { label: "Stress Test",  href: id ? `/evaluations/${id}/stress` : null,       active: id ? path.includes("/stress") : false },
+    { label: "Datasets",     href: id ? `/evaluations/${id}/datasets` : null,     active: id ? path.includes("/datasets") && !path.includes("/improvement") : false },
+    { label: "Improvement",  href: id ? `/evaluations/${id}/improvement` : null,  active: id ? path.includes("/improvement") : false },
+    { label: "Report",       href: id ? `/evaluations/${id}/report` : null,       active: id ? path.includes("/report") : false },
   ];
 
   return (

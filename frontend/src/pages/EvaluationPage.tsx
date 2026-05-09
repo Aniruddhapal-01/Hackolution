@@ -1,11 +1,11 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Upload, Play, AlertTriangle, CheckCircle, Cpu, FileText, Zap, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { Upload, Play, AlertTriangle, CheckCircle, Cpu, FileText, Zap, Loader2, RefreshCw, Trash2, ImageIcon, X } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import TopNavBar from "../components/TopNavBar";
 import { StatusBadge, RiskBadge, ProgressBar, PipelineSteps, Button, MetricCard, Card, ConfidenceBar, C, FONT, MONO } from "../components/ui";
 import { useEvaluation, useEvaluations } from "../hooks/useProject";
-import { uploadModel, runEvaluation, deleteEvaluation, ACTIVE_STATUSES } from "../api/client";
+import { uploadModel, runEvaluation, deleteEvaluation, uploadSeedImages, getSeedImages, deleteSeedImages, ACTIVE_STATUSES } from "../api/client";
 
 export default function EvaluationPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +18,49 @@ export default function EvaluationPage() {
   const [dragOver, setDragOver]   = useState(false);
   const [deleting, setDeleting]   = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Seed images state
+  const [seedInfo, setSeedInfo]         = useState<{ count: number; has_seeds: boolean; filenames: string[] } | null>(null);
+  const [seedUploading, setSeedUploading] = useState(false);
+  const [seedUploadPct, setSeedUploadPct] = useState(0);
+  const [seedDragOver, setSeedDragOver]   = useState(false);
+  const seedRef = useRef<HTMLInputElement>(null);
+
+  // Load seed image info on mount
+  useEffect(() => {
+    if (!id) return;
+    getSeedImages(id).then(setSeedInfo).catch(() => {});
+  }, [id]);
+
+  const handleSeedUpload = async (files: FileList | null) => {
+    if (!id || !files || files.length === 0) return;
+    const fileArr = Array.from(files).filter(f =>
+      /\.(jpg|jpeg|png|bmp|webp)$/i.test(f.name)
+    );
+    if (fileArr.length === 0) {
+      alert("Please select image files (.jpg .jpeg .png .bmp .webp)");
+      return;
+    }
+    setSeedUploading(true); setSeedUploadPct(0);
+    try {
+      await uploadSeedImages(id, fileArr, p => setSeedUploadPct(p));
+      const info = await getSeedImages(id);
+      setSeedInfo(info);
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Seed image upload failed");
+    } finally {
+      setSeedUploading(false);
+    }
+  };
+
+  const handleDeleteSeeds = async () => {
+    if (!id) return;
+    if (!window.confirm("Remove all seed images? Procedural generation will be used instead.")) return;
+    try {
+      await deleteSeedImages(id);
+      setSeedInfo({ count: 0, has_seeds: false, filenames: [] });
+    } catch {}
+  };
 
   const handleFile = async (file: File) => {
     if (!id) return;
@@ -166,6 +209,99 @@ export default function EvaluationPage() {
               <input ref={fileRef} type="file" hidden accept=".pt,.pth,.onnx,.h5,.pkl,.joblib"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
             </div>
+
+            {/* Seed Images — only for image evaluations */}
+            {ev.dataset_type === "image" && (
+              <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "20px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <ImageIcon size={13} color="#3b82f6" />
+                    <p style={{ fontSize: "13px", color: "#3b82f6", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: MONO }}>
+                      Seed Images
+                    </p>
+                  </div>
+                  {seedInfo?.has_seeds && (
+                    <button onClick={handleDeleteSeeds} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontFamily: MONO }}>
+                      <X size={11} /> Clear
+                    </button>
+                  )}
+                </div>
+
+                {seedInfo?.has_seeds ? (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", background: "#001a3a", border: "1px solid #3b82f6", borderRadius: "8px", marginBottom: "10px" }}>
+                      <CheckCircle size={14} color="#3b82f6" style={{ flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: "13px", fontWeight: 600, color: "#fff" }}>
+                          {seedInfo.count} seed image{seedInfo.count !== 1 ? "s" : ""} uploaded
+                        </p>
+                        <p style={{ fontSize: "11px", color: "#64748b", fontFamily: MONO, marginTop: "2px" }}>
+                          All generated datasets will use these as base images
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {seedInfo.filenames.slice(0, 6).map((name, i) => (
+                        <span key={i} style={{
+                          padding: "2px 8px", background: "#0d1117", border: "1px solid #1e3a5f",
+                          borderRadius: "4px", fontSize: "10px", color: "#64748b", fontFamily: MONO,
+                          maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {name}
+                        </span>
+                      ))}
+                      {seedInfo.filenames.length > 6 && (
+                        <span style={{ padding: "2px 8px", fontSize: "10px", color: "#374151", fontFamily: MONO }}>
+                          +{seedInfo.filenames.length - 6} more
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => seedRef.current?.click()}
+                      style={{ marginTop: "10px", background: "none", border: "1px solid #1e3a5f", borderRadius: "6px", padding: "5px 12px", color: "#3b82f6", fontSize: "11px", fontFamily: MONO, cursor: "pointer" }}>
+                      + Add more images
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div
+                      onDragOver={e => { e.preventDefault(); setSeedDragOver(true); }}
+                      onDragLeave={() => setSeedDragOver(false)}
+                      onDrop={e => { e.preventDefault(); setSeedDragOver(false); handleSeedUpload(e.dataTransfer.files); }}
+                      onClick={() => seedRef.current?.click()}
+                      style={{
+                        border: `2px dashed ${seedDragOver ? "#3b82f6" : "#1e3a5f"}`,
+                        borderRadius: "10px", padding: "24px 16px", textAlign: "center",
+                        cursor: "pointer", background: seedDragOver ? "#001a3a" : "transparent",
+                        transition: "all 150ms",
+                      }}
+                    >
+                      {seedUploading ? (
+                        <div>
+                          <Loader2 size={20} color="#3b82f6" style={{ animation: "spin 1s linear infinite", margin: "0 auto 8px" }} />
+                          <p style={{ fontSize: "12px", color: "#3b82f6", fontFamily: MONO }}>{seedUploadPct}%</p>
+                        </div>
+                      ) : (
+                        <>
+                          <ImageIcon size={20} color="#1e3a5f" style={{ margin: "0 auto 8px" }} />
+                          <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "3px" }}>
+                            Drop your images here <span style={{ color: "#64748b" }}>(optional)</span>
+                          </p>
+                          <p style={{ fontSize: "11px", color: "#374151", fontFamily: MONO }}>
+                            .jpg .jpeg .png .bmp .webp · up to 20 images
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <p style={{ fontSize: "11px", color: "#374151", marginTop: "8px", lineHeight: 1.5 }}>
+                      If provided, stressor augmentations (fog, rain, noise…) will be applied to your images instead of procedurally generated ones.
+                    </p>
+                  </div>
+                )}
+                <input ref={seedRef} type="file" hidden multiple accept=".jpg,.jpeg,.png,.bmp,.webp"
+                  onChange={e => handleSeedUpload(e.target.files)} />
+              </div>
+            )}
 
             {/* Params */}
             <div style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "20px" }}>

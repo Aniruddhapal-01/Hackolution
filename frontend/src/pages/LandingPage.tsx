@@ -1,7 +1,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import styled, { keyframes } from "styled-components";
-import { Cpu, Shield, Zap, BarChart3, ArrowRight, CheckCircle, Activity } from "lucide-react";
+import { Cpu, Shield, Zap, BarChart3, ArrowRight, CheckCircle, Activity, ChevronRight } from "lucide-react";
+import PixelSnow from "../components/PixelSnow";
 
 // ─── Keyframes ────────────────────────────────────────────────────────────────
 
@@ -305,10 +306,28 @@ export default function LandingPage() {
   ];
 
   return (
-    <div style={{ background: "#000000", minHeight: "100vh", fontFamily: "'Google Sans', sans-serif" }}>
+    <div style={{ background: "#000000", minHeight: "100vh", fontFamily: "'Google Sans', sans-serif", position: "relative" }}>
+
+      {/* ── PixelSnow background ── */}
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
+        <PixelSnow
+          color="#facc15"
+          flakeSize={0.01}
+          minFlakeSize={1.25}
+          pixelResolution={200}
+          speed={1.25}
+          density={0.3}
+          direction={125}
+          brightness={1}
+          depthFade={8}
+          farPlane={20}
+          gamma={0.4545}
+          variant="square"
+        />
+      </div>
 
       {/* ── Navbar ── */}
-      <Nav>
+      <Nav style={{ zIndex: 50 }}>
         <NavLogo>
           <div className="logo-icon"><Cpu size={16} /></div>
           <span>BlindSpot.AI</span>

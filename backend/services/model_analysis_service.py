@@ -30,7 +30,7 @@ MEDICAL_KEYWORDS = {
 
 SATELLITE_KEYWORDS = {
     "satellite", "aerial", "remote sensing", "sar", "multispectral",
-    "hyperspectral", "landsat", "sentinel", "drone", "uav", "overhead",
+    "hyperspectral", "landsat", "sentinel", "overhead",
     "geospatial", "terrain", "land cover", "crop", "deforestation",
 }
 
@@ -38,6 +38,7 @@ AUTONOMOUS_KEYWORDS = {
     "car", "vehicle", "traffic", "road", "driving", "autonomous",
     "pedestrian", "yolo", "detection", "dashcam", "lidar", "kitti",
     "cityscapes", "bdd100k", "waymo", "nuscenes", "coco",
+    "drone", "uav", "quadcopter", "aerial", "surveillance", "rotor",
 }
 
 
@@ -51,10 +52,10 @@ def detect_image_domain(name: str, architecture: Optional[str], description: Opt
 
     if words & MEDICAL_KEYWORDS:
         return "medical"
-    if words & SATELLITE_KEYWORDS:
-        return "satellite"
     if words & AUTONOMOUS_KEYWORDS:
         return "autonomous"
+    if words & SATELLITE_KEYWORDS:
+        return "satellite"
     return "general"
 
 
@@ -244,37 +245,46 @@ def analyze_model(
     framework: Optional[str],
     metrics: Dict[str, Any],
     progress_callback=None,
-    # Extra context for domain detection
     name: Optional[str] = None,
     description: Optional[str] = None,
+    domain_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Main analysis entry point. Returns structured analysis results.
-    Domain-aware for image models: detects medical/satellite/autonomous/general.
+    Domain-aware for image models: detects medical/satellite/autonomous/drone/general.
+    If domain_override is set, skips auto-detection entirely.
     """
     if USE_MOCK:
         return _mock_analyze(evaluation_id, dataset_type, architecture, framework, metrics,
-                             progress_callback, name, description, model_path=model_path)
+                             progress_callback, name, description,
+                             model_path=model_path, domain_override=domain_override)
     try:
         return _real_analyze(evaluation_id, model_path, dataset_type, architecture, framework,
-                             metrics, progress_callback, name, description)
+                             metrics, progress_callback, name, description,
+                             domain_override=domain_override)
     except Exception as e:
         logger.error(f"[ModelAnalysis] Real analysis failed, falling back to mock: {e}")
         return _mock_analyze(evaluation_id, dataset_type, architecture, framework, metrics,
-                             progress_callback, name, description)
+                             progress_callback, name, description,
+                             model_path=model_path, domain_override=domain_override)
 
 
-def _get_image_context(dataset_type: str, name: Optional[str], architecture: Optional[str], description: Optional[str]):
-    """Return (domain, edge_cases, template, vuln_stressors) for image models."""
-    domain = detect_image_domain(name or "", architecture, description)
-    edge_cases = EDGE_CASES_BY_DOMAIN[domain]
-    template   = WEAKNESS_TEMPLATES_BY_DOMAIN[domain]
-    stressors  = VULNERABILITY_VECTORS_BY_DOMAIN[domain]
+def _get_image_context(dataset_type: str, name: Optional[str], architecture: Optional[str],
+                        description: Optional[str], domain_override: Optional[str] = None):
+    """Return (domain, edge_cases, template, vuln_stressors) for image models.
+    Uses domain_override if provided, otherwise auto-detects from name/arch/description."""
+    domain = domain_override if domain_override else detect_image_domain(name or "", architecture, description)
+    # Normalize drone → autonomous (same stressor set, different base images)
+    if domain == "drone":
+        domain = "autonomous"
+    edge_cases = EDGE_CASES_BY_DOMAIN.get(domain, EDGE_CASES_BY_DOMAIN["general"])
+    template   = WEAKNESS_TEMPLATES_BY_DOMAIN.get(domain, WEAKNESS_TEMPLATES_BY_DOMAIN["general"])
+    stressors  = VULNERABILITY_VECTORS_BY_DOMAIN.get(domain, VULNERABILITY_VECTORS_BY_DOMAIN["general"])
     return domain, edge_cases, template, stressors
 
 
 def _real_analyze(evaluation_id, model_path, dataset_type, architecture, framework,
-                  metrics, progress_callback, name, description):
+                  metrics, progress_callback, name, description, domain_override=None):
     result = {}
     ext = Path(model_path).suffix.lower()
 
@@ -350,7 +360,7 @@ def _real_analyze(evaluation_id, model_path, dataset_type, architecture, framewo
 
 
 def _mock_analyze(evaluation_id, dataset_type, architecture, framework, metrics,
-                  progress_callback, name, description, model_path=""):
+                  progress_callback, name, description, model_path="", domain_override=None):
     logger.info(f"[ModelAnalysis MOCK] Analyzing evaluation {evaluation_id}")
     stages = [
         (15, "Parsing model architecture..."),
@@ -366,7 +376,9 @@ def _mock_analyze(evaluation_id, dataset_type, architecture, framework, metrics,
         if progress_callback: progress_callback(pct)
 
     if dataset_type == "image":
-        domain, edge_cases, template, stressor_keys = _get_image_context(dataset_type, name, architecture, description)
+        domain, edge_cases, template, stressor_keys = _get_image_context(
+            dataset_type, name, architecture, description, domain_override=domain_override
+        )
     else:
         domain        = None
         edge_cases    = EDGE_CASES_BY_TYPE.get(dataset_type, EDGE_CASES_BY_TYPE["tabular"])
@@ -399,6 +411,7 @@ def _mock_analyze(evaluation_id, dataset_type, architecture, framework, metrics,
             f"Baseline accuracy: {metrics.get('accuracy', 'N/A')}. "
             f"Identified {len(edge_cases)} potential failure modes across "
             f"{len(template['weaknesses'])} weakness categories."
+            + (f" Domain manually set to '{domain_override}'." if domain_override else "")
             + (f" Model inspection: {model_inspection.get('estimator_class','unknown')} "
                f"with {model_inspection.get('n_features','?')} features." if model_inspection else "")
         ),
