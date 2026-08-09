@@ -14,6 +14,15 @@ const DATASET_TYPES = [
   { value: "time_series", label: "Time-Series Data" },
   { value: "vector",      label: "Vector / Embedding Dataset" },
 ];
+
+const IMAGE_DOMAINS = [
+  { value: "",           label: "Auto-detect (recommended)" },
+  { value: "general",    label: "General Computer Vision" },
+  { value: "autonomous", label: "Autonomous Driving / Vehicles" },
+  { value: "drone",      label: "Drone / UAV Detection" },
+  { value: "medical",    label: "Medical Imaging (X-ray, MRI, CT)" },
+  { value: "satellite",  label: "Satellite / Remote Sensing" },
+];
 const FRAMEWORKS = [
   { value: "pytorch",    label: "PyTorch" },
   { value: "tensorflow", label: "TensorFlow / Keras" },
@@ -31,6 +40,7 @@ export default function DashboardPage() {
   const [form, setForm] = useState<any>({
     name:"", description:"", dataset_type:"", framework:"",
     architecture:"", optimizer:"", learning_rate:"", epochs:"", batch_size:"", input_size:"",
+    image_domain_override:"",
     metric_accuracy:"", metric_precision:"", metric_recall:"",
     metric_f1:"", metric_map:"", metric_roc_auc:"",
   });
@@ -42,6 +52,7 @@ export default function DashboardPage() {
     try {
       const ev = await createEvaluation({
         ...form,
+        image_domain_override: form.image_domain_override || undefined,
         learning_rate: form.learning_rate ? Number(form.learning_rate) : undefined,
         epochs:        form.epochs        ? Number(form.epochs)        : undefined,
         batch_size:    form.batch_size    ? Number(form.batch_size)    : undefined,
@@ -206,6 +217,27 @@ export default function DashboardPage() {
                   <Input label="Evaluation Name *" value={form.name} onChange={v => set("name",v)} placeholder="e.g. ResNet50 Fog Test" style={{ gridColumn: "1 / -1" }} />
                   <Select label="Dataset Type *" value={form.dataset_type} onChange={v => set("dataset_type",v)} options={DATASET_TYPES} required />
                   <Select label="Framework" value={form.framework} onChange={v => set("framework",v)} options={FRAMEWORKS} />
+                  {form.dataset_type === "image" && (
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <Select
+                        label="Image Domain (override auto-detection)"
+                        value={form.image_domain_override}
+                        onChange={v => set("image_domain_override", v)}
+                        options={IMAGE_DOMAINS}
+                      />
+                      {!form.image_domain_override && (
+                        <p style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", fontFamily: "monospace" }}>
+                          Auto-detect uses the evaluation name + architecture to guess the domain.
+                          Set this manually if the wrong stressors are generated.
+                        </p>
+                      )}
+                      {form.image_domain_override && (
+                        <p style={{ fontSize: "11px", color: "#facc15", marginTop: "4px", fontFamily: "monospace" }}>
+                          ✓ Domain locked to "{IMAGE_DOMAINS.find(d => d.value === form.image_domain_override)?.label}" — auto-detection skipped.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

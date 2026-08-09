@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Database, ExternalLink, ArrowLeft, Loader2, Download, Sparkles, BookOpen, RefreshCw } from "lucide-react";
+import { Database, ExternalLink, ArrowLeft, Loader2, Download, Sparkles, BookOpen, RefreshCw, TrendingUp } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import TopNavBar from "../components/TopNavBar";
-import { MetricCard, Card, Button, C, FONT, MONO } from "../components/ui";
+import { MetricCard, Card, Button, FONT, MONO } from "../components/ui";
 import { useEvaluation, useEvaluations } from "../hooks/useProject";
 import { api } from "../api/client";
 
@@ -50,9 +50,9 @@ export default function DatasetsPage() {
   if (!evaluation) return null;
 
   const ev = evaluation;
-  const datasets = ev.dataset_records || [];
-  const generated   = datasets.filter((d: any) => d.source === "synthetic");
-  const suggestions = datasets.filter((d: any) => d.source !== "synthetic");
+  const datasets      = ev.dataset_records || [];
+  const generated     = datasets.filter((d: any) => d.source === "synthetic");
+  const suggestions   = datasets.filter((d: any) => d.source !== "synthetic");
   const hasOldFakeUrls = generated.length === 0 && datasets.length > 0;
   const totalGenSamples = generated.reduce((a: number, d: any) => a + (d.sample_count || 0), 0);
   const totalGenSizeMB  = generated.reduce((a: number, d: any) => a + (d.size_bytes || 0), 0) / 1024 / 1024;
@@ -78,6 +78,11 @@ export default function DatasetsPage() {
             {(datasets.length === 0 || hasOldFakeUrls) && ev.status === "ready" && (
               <Button onClick={handleRegenerate} variant="secondary" size="sm" loading={regenerating}>
                 <RefreshCw size={13} /> {regenerating ? "Generating..." : "Generate Datasets"}
+              </Button>
+            )}
+            {ev.status === "ready" && (
+              <Button onClick={() => navigate(`/evaluations/${id}/improvement`)} variant="primary" size="sm">
+                <TrendingUp size={13} /> Improvement Datasets
               </Button>
             )}
             <Button onClick={() => navigate(`/evaluations/${id}/report`)} variant="success" size="sm">
@@ -134,7 +139,9 @@ export default function DatasetsPage() {
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">synthetic</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">
+                              synthetic
+                            </span>
                             {ds.target_stressor && (
                               <span className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white/[0.03] border border-white/[0.06]">
                                 {ds.target_stressor.replace(/_/g, " ")}
@@ -154,7 +161,9 @@ export default function DatasetsPage() {
                         {ds.sample_count != null && <span className="text-emerald-400">{ds.sample_count.toLocaleString()} samples</span>}
                         {ds.size_bytes != null && (
                           <span className="text-slate-600">
-                            {ds.size_bytes > 1048576 ? (ds.size_bytes / 1048576).toFixed(1) + " MB" : (ds.size_bytes / 1024).toFixed(0) + " KB"}
+                            {ds.size_bytes > 1048576
+                              ? (ds.size_bytes / 1048576).toFixed(1) + " MB"
+                              : (ds.size_bytes / 1024).toFixed(0) + " KB"}
                           </span>
                         )}
                         <span className="text-slate-700">COCO JSON + YOLO TXT</span>
@@ -167,7 +176,7 @@ export default function DatasetsPage() {
 
             {/* Real Dataset Suggestions */}
             {suggestions.length > 0 && (
-              <div>
+              <div className="mb-10">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
                     <BookOpen size={14} className="text-amber-400" />
@@ -209,6 +218,44 @@ export default function DatasetsPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Improvement datasets callout */}
+            {ev.status === "ready" && (
+              <div style={{
+                background: "linear-gradient(135deg, #0a1628 0%, #0d1117 100%)",
+                border: "1px solid #3b82f630",
+                borderRadius: "12px", padding: "20px 24px",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                  <div style={{
+                    width: "36px", height: "36px", borderRadius: "9px", flexShrink: 0,
+                    background: "#1e3a5f", border: "1px solid #3b82f6",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <TrendingUp size={16} color="#3b82f6" />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: "14px", fontWeight: 700, color: "#fff", margin: "0 0 3px" }}>
+                      Training Improvement Datasets
+                    </p>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: 0 }}>
+                      Generate augmented training data to fix your model's detected weaknesses — 3 difficulty levels per failed stressor.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => navigate(`/evaluations/${id}/improvement`)}
+                  style={{
+                    flexShrink: 0, display: "flex", alignItems: "center", gap: "6px",
+                    padding: "8px 16px", background: "#3b82f6", border: "none",
+                    color: "#fff", fontSize: "13px", fontFamily: MONO, fontWeight: 700,
+                    borderRadius: "8px", cursor: "pointer", whiteSpace: "nowrap",
+                  }}>
+                  <TrendingUp size={13} /> Go to Improvement
+                </button>
               </div>
             )}
           </>

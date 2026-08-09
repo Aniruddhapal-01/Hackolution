@@ -161,6 +161,25 @@ export const uploadModel = (id: string, file: File, onProgress?: (pct: number) =
   }).then(r => r.data);
 };
 
+export const uploadSeedImages = (id: string, files: File[], onProgress?: (pct: number) => void) => {
+  const form = new FormData();
+  files.forEach(f => form.append("files", f));
+  return api.post(`/api/evaluations/${id}/upload-seed-images`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: e => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+    },
+  }).then(r => r.data);
+};
+
+export const getSeedImages = (id: string) =>
+  api.get<{ count: number; has_seeds: boolean; filenames: string[] }>(
+    `/api/evaluations/${id}/seed-images`
+  ).then(r => r.data);
+
+export const deleteSeedImages = (id: string) =>
+  api.delete(`/api/evaluations/${id}/seed-images`).then(r => r.data);
+
 export const runEvaluation = (id: string) =>
   api.post(`/api/evaluations/${id}/run`).then(r => r.data);
 

@@ -5,6 +5,7 @@ import DashboardPage from "./pages/DashboardPage";
 import EvaluationPage from "./pages/EvaluationPage";
 import StressTestPage from "./pages/StressTestPage";
 import DatasetsPage from "./pages/DatasetsPage";
+import ImprovementPage from "./pages/ImprovementPage";
 import ReportPage from "./pages/ReportPage";
 import DocsPage from "./pages/DocsPage";
 import PricingPage from "./pages/PricingPage";
@@ -14,18 +15,19 @@ export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
-        <Route path="/"                                  element={<LandingPage />} />
-        <Route path="/docs"                              element={<DocsPage />} />
-        <Route path="/pricing"                           element={<PricingPage />} />
-        <Route path="/evaluations"                       element={<DashboardPage />} />
-        <Route path="/evaluations/:id"                   element={<EvaluationPage />} />
-        <Route path="/evaluations/:id/stress"            element={<StressTestPage />} />
-        <Route path="/evaluations/:id/datasets"          element={<DatasetsPage />} />
-        <Route path="/evaluations/:id/report"            element={<ReportPage />} />
+        <Route path="/"                                      element={<LandingPage />} />
+        <Route path="/docs"                                  element={<DocsPage />} />
+        <Route path="/pricing"                               element={<PricingPage />} />
+        <Route path="/evaluations"                           element={<DashboardPage />} />
+        <Route path="/evaluations/:id"                       element={<EvaluationPage />} />
+        <Route path="/evaluations/:id/stress"                element={<StressTestPage />} />
+        <Route path="/evaluations/:id/datasets"              element={<DatasetsPage />} />
+        <Route path="/evaluations/:id/improvement"           element={<ImprovementPage />} />
+        <Route path="/evaluations/:id/report"                element={<ReportPage />} />
         {/* Legacy redirects */}
-        <Route path="/projects"                          element={<Navigate to="/evaluations" replace />} />
-        <Route path="/projects/:id"                      element={<Navigate to="/evaluations" replace />} />
-        <Route path="*"                                  element={<Navigate to="/" replace />} />
+        <Route path="/projects"                              element={<Navigate to="/evaluations" replace />} />
+        <Route path="/projects/:id"                          element={<Navigate to="/evaluations" replace />} />
+        <Route path="*"                                      element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

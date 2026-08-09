@@ -58,7 +58,7 @@ DATASET_SUGGESTIONS = {
 }
 
 
-def fetch_datasets(evaluation_id, dataset_type, vulnerability_vector, progress_callback=None, image_domain='general'):
+def fetch_datasets(evaluation_id, dataset_type, vulnerability_vector, progress_callback=None, image_domain='general', seed_images=None):
     results = []
     stressors = list(vulnerability_vector.keys())
     total = len(stressors)
@@ -70,10 +70,9 @@ def fetch_datasets(evaluation_id, dataset_type, vulnerability_vector, progress_c
         time.sleep(0.2)
         vuln_score = vulnerability_vector[stressor_key]
 
-        # Scale sample count by vulnerability severity:
-        # vuln_score ~0.1 (critical) → 3x samples; ~0.9 (robust) → 0.5x samples
-        severity   = max(0.0, min(1.0, 1.0 - vuln_score))   # 0=robust, 1=critical
-        scale      = 0.5 + severity * 2.5                    # 0.5x to 3.0x
+        # Scale sample count by vulnerability severity
+        severity   = max(0.0, min(1.0, 1.0 - vuln_score))
+        scale      = 0.5 + severity * 2.5
         n_samples  = max(20, int(IMAGES_PER_STRESSOR * 10 * scale))
 
         generated = _generate_synthetic_dataset(
@@ -83,6 +82,7 @@ def fetch_datasets(evaluation_id, dataset_type, vulnerability_vector, progress_c
             n_samples=n_samples,
             image_domain=image_domain,
             vuln_score=vuln_score,
+            seed_images=seed_images,
         )
         if generated:
             results.append(generated)
@@ -116,14 +116,15 @@ def _severity_label(severity: float) -> str:
 
 
 def _generate_synthetic_dataset(evaluation_id, dataset_type, stressor_key,
-                                 n_samples=80, image_domain="general", vuln_score=0.5):
+                                 n_samples=80, image_domain="general", vuln_score=0.5,
+                                 seed_images=None):
     out_dir = __import__("pathlib").Path(DATASETS_DIR) / evaluation_id / stressor_key
     out_dir.mkdir(parents=True, exist_ok=True)
     severity   = max(0.0, min(1.0, 1.0 - vuln_score))
     sev_label  = _severity_label(severity)
     try:
         if dataset_type == "image":
-            zip_path, count = _generate_image_dataset(out_dir, stressor_key, n_samples, image_domain, severity)
+            zip_path, count = _generate_image_dataset(out_dir, stressor_key, n_samples, image_domain, severity, seed_images=seed_images)
         elif dataset_type == "tabular":
             zip_path, count = _generate_tabular_dataset(out_dir, stressor_key, n_samples * 10, severity)
         elif dataset_type == "time_series":
@@ -133,7 +134,7 @@ def _generate_synthetic_dataset(evaluation_id, dataset_type, stressor_key,
         elif dataset_type == "vector":
             zip_path, count = _generate_vector_dataset(out_dir, stressor_key, n_samples * 10)
         else:
-            zip_path, count = _generate_image_dataset(out_dir, stressor_key, n_samples, image_domain, severity)
+            zip_path, count = _generate_image_dataset(out_dir, stressor_key, n_samples, image_domain, severity, seed_images=seed_images)
         rel_key    = os.path.relpath(zip_path, DATA_DIR).replace("\\", "/")
         size_bytes = os.path.getsize(zip_path)
         label      = stressor_key.replace("_", " ").title()
@@ -159,23 +160,52 @@ def _generate_synthetic_dataset(evaluation_id, dataset_type, stressor_key,
         return {}
 
 
-def _generate_image_dataset(out_dir, stressor_key, n_samples, image_domain="general", severity=0.5):
+def _generate_image_dataset(out_dir, stressor_key, n_samples, image_domain="general", severity=0.5, seed_images=None):
     from pathlib import Path as _P
     images_dir = out_dir / "images"; labels_dir = out_dir / "labels"
     images_dir.mkdir(exist_ok=True); labels_dir.mkdir(exist_ok=True)
-    cat_names = {"medical":"pathology_region","satellite":"land_cover_region","autonomous":"vehicle","general":"target_object"}
+    cat_names = {"medical":"pathology_region","satellite":"land_cover_region","autonomous":"vehicle","drone":"drone","general":"target_object"}
     coco = {"info":{"description":f"BlindSpot.AI Synthetic - {stressor_key} ({image_domain}) severity={severity:.2f}","version":"2.0"},
             "images":[],"annotations":[],"categories":[{"id":1,"name":cat_names.get(image_domain,"target_object")}]}
     count = min(n_samples, 40)
+
+    # Validate seed images — filter to only existing readable files
+    valid_seeds = []
+    if seed_images:
+        for sp in seed_images:
+            try:
+                if os.path.exists(sp):
+                    valid_seeds.append(sp)
+            except Exception:
+                pass
+
     for i in range(count):
-        img = _make_base_image(i, image_domain)
+        if valid_seeds:
+            # Use seed image as base — cycle through available seeds
+            try:
+                seed_path = valid_seeds[i % len(valid_seeds)]
+                img = Image.open(seed_path).convert("RGB")
+                # Resize to consistent size while preserving aspect ratio
+                img.thumbnail((640, 640), Image.LANCZOS)
+                # Pad to square if needed
+                if img.size[0] != img.size[1]:
+                    new_img = Image.new("RGB", (max(img.size), max(img.size)), (0, 0, 0))
+                    offset = ((max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2)
+                    new_img.paste(img, offset)
+                    img = new_img
+            except Exception as e:
+                logger.warning(f"[DatasetGen] Could not load seed image {seed_path}: {e} — using procedural")
+                img = _make_base_image(i, image_domain)
+        else:
+            img = _make_base_image(i, image_domain)
+
         img = _apply_image_stressor(img, stressor_key, image_domain, severity=severity)
         fname = f"{stressor_key}_{i:04d}.jpg"
         img.save(str(images_dir / fname), quality=88)
         w, h = img.size
         bx=random.randint(20,w//3); by=random.randint(20,h//3)
         bw=random.randint(w//4,w//2); bh=random.randint(h//4,h//2)
-        coco["images"].append({"id":i+1,"file_name":fname,"width":w,"height":h,"stressor":stressor_key,"domain":image_domain,"severity":round(severity,2)})
+        coco["images"].append({"id":i+1,"file_name":fname,"width":w,"height":h,"stressor":stressor_key,"domain":image_domain,"severity":round(severity,2),"from_seed":bool(valid_seeds)})
         coco["annotations"].append({"id":i+1,"image_id":i+1,"category_id":1,"bbox":[bx,by,bw,bh],"area":bw*bh,"iscrowd":0,"score":round(random.uniform(0.45,0.92),3)})
         cx2=(bx+bw/2)/w; cy2=(by+bh/2)/h; nw=bw/w; nh=bh/h
         with open(str(labels_dir/fname.replace(".jpg",".txt")),"w") as lf:
@@ -183,10 +213,11 @@ def _generate_image_dataset(out_dir, stressor_key, n_samples, image_domain="gene
     ann_dir = out_dir/"annotations"; ann_dir.mkdir(exist_ok=True)
     with open(str(ann_dir/"instances.json"),"w") as jf: json.dump(coco,jf,indent=2)
     suggestion = DATASET_SUGGESTIONS.get(stressor_key,{})
+    seed_note = f"\nSeed images used: {len(valid_seeds)} uploaded image(s)" if valid_seeds else "\nBase images: procedurally generated"
     readme = (f"# BlindSpot.AI Synthetic Dataset\nDomain: {image_domain}\nStressor: {stressor_key}\n"
-              f"Severity: {severity:.2f} (model-specific)\nSamples: {count}\n\n"
+              f"Severity: {severity:.2f} (model-specific)\nSamples: {count}{seed_note}\n\n"
               f"## Suggested Real Dataset\n{suggestion.get('name','N/A')}\n{suggestion.get('real_url','')}\n")
-    with open(str(out_dir/"README.md"),"w") as rf: rf.write(readme)
+    with open(str(out_dir/"README.md"),"w", encoding="utf-8") as rf: rf.write(readme)
     zip_path = str(out_dir.parent/f"{stressor_key}_image_dataset.zip")
     with zipfile.ZipFile(zip_path,"w",zipfile.ZIP_DEFLATED) as zf:
         for fp in out_dir.rglob("*"):
@@ -195,10 +226,120 @@ def _generate_image_dataset(out_dir, stressor_key, n_samples, image_domain="gene
 
 
 def _make_base_image(idx, image_domain="general"):
-    if image_domain == "medical":   return _make_medical_image(idx)
+    if image_domain == "medical":    return _make_medical_image(idx)
     elif image_domain == "satellite": return _make_satellite_image(idx)
     elif image_domain == "autonomous": return _make_car_image(idx)
+    elif image_domain == "drone":     return _make_drone_image(idx)
     else: return _make_general_image(idx)
+
+
+def _make_drone_image(idx):
+    """
+    Aerial/drone-view image: sky background with ground terrain below,
+    a small drone silhouette in the frame, and optional secondary objects
+    (bird, aircraft). Realistic for drone detection training data.
+    """
+    import math as _m
+    w, h = 640, 640
+    img = Image.new("RGB", (w, h))
+    draw = ImageDraw.Draw(img)
+
+    # Sky gradient (top 60%) — varies by time of day
+    sky_types = [
+        [(100, 149, 237), (135, 180, 255)],   # clear day
+        [(180, 200, 220), (210, 220, 230)],   # overcast
+        [(255, 160, 60),  (255, 100, 30)],    # sunset
+        [(20,  30,  60),  (40,  50,  90)],    # dusk
+        [(60,  80, 120),  (80, 100, 140)],    # hazy
+    ]
+    sky = sky_types[idx % len(sky_types)]
+    horizon = int(h * 0.55)
+    for y in range(horizon):
+        t = y / horizon
+        r = int(sky[0][0] * (1-t) + sky[1][0] * t)
+        g = int(sky[0][1] * (1-t) + sky[1][1] * t)
+        b = int(sky[0][2] * (1-t) + sky[1][2] * t)
+        draw.line([(0, y), (w, y)], fill=(r, g, b))
+
+    # Ground (bottom 45%) — terrain varies
+    terrain_types = [
+        (60, 100, 50),   # green fields
+        (120, 100, 70),  # dry/desert
+        (80, 90, 80),    # urban grey
+        (40, 70, 110),   # water/lake
+    ]
+    ground_col = terrain_types[idx % len(terrain_types)]
+    draw.rectangle([0, horizon, w, h], fill=ground_col)
+
+    # Ground texture — subtle grid/field lines
+    for gx in range(0, w, 60):
+        draw.line([(gx, horizon), (gx + 20, h)], fill=(
+            max(0, ground_col[0]-15), max(0, ground_col[1]-15), max(0, ground_col[2]-15)
+        ), width=1)
+
+    # Horizon line
+    draw.line([(0, horizon), (w, horizon)], fill=(200, 210, 220), width=1)
+
+    # ── Main drone (center-ish, varies by idx) ──────────────────────────────
+    drone_x = w // 2 + random.randint(-80, 80)
+    drone_y = int(h * 0.30) + random.randint(-40, 40)
+    drone_scale = random.uniform(0.8, 1.4)
+    _draw_drone(draw, drone_x, drone_y, drone_scale)
+
+    # ── Optional secondary object (bird or aircraft) ─────────────────────────
+    if idx % 3 == 0:
+        # Bird — small V shape
+        bx = random.randint(50, w-50)
+        by = random.randint(30, horizon - 30)
+        draw.line([(bx-12, by), (bx, by-6), (bx+12, by)], fill=(40, 40, 40), width=2)
+    elif idx % 3 == 1:
+        # Aircraft — elongated shape far away
+        ax = random.randint(100, w-100)
+        ay = random.randint(20, horizon // 2)
+        draw.ellipse([ax-18, ay-4, ax+18, ay+4], fill=(200, 200, 210))
+        draw.line([(ax-25, ay), (ax+25, ay)], fill=(180, 180, 190), width=2)  # wings
+
+    # ── Detection label overlay ───────────────────────────────────────────────
+    draw.rectangle([drone_x - 30, drone_y - 30, drone_x + 30, drone_y + 30],
+                   outline=(0, 255, 0), width=2)
+    draw.rectangle([drone_x - 30, drone_y - 44, drone_x + 30, drone_y - 30],
+                   fill=(0, 0, 0))
+    draw.text((drone_x - 26, drone_y - 43), "DRONE", fill=(0, 255, 0))
+
+    return img
+
+
+def _draw_drone(draw, cx, cy, scale=1.0):
+    """Draw a realistic quadcopter drone silhouette."""
+    import math
+    s = scale
+    body_col  = (50, 55, 65)
+    arm_col   = (70, 75, 85)
+    rotor_col = (30, 30, 35)
+    led_col   = (255, 50, 50)
+
+    # Central body
+    bw, bh = int(22 * s), int(12 * s)
+    draw.ellipse([cx-bw, cy-bh, cx+bw, cy+bh], fill=body_col)
+
+    # 4 arms at 45° angles
+    arm_len = int(28 * s)
+    for angle_deg in [45, 135, 225, 315]:
+        rad = math.radians(angle_deg)
+        ex = int(cx + arm_len * math.cos(rad))
+        ey = int(cy + arm_len * math.sin(rad))
+        draw.line([(cx, cy), (ex, ey)], fill=arm_col, width=int(4 * s))
+
+        # Rotor disc at each arm end
+        rr = int(14 * s)
+        draw.ellipse([ex-rr, ey-rr, ex+rr, ey+rr], fill=rotor_col)
+        draw.ellipse([ex-rr+2, ey-rr+2, ex+rr-2, ey+rr-2], outline=(100, 100, 110), width=1)
+
+    # Camera gimbal (bottom center)
+    draw.ellipse([cx-int(5*s), cy+int(8*s), cx+int(5*s), cy+int(16*s)], fill=(20, 20, 25))
+
+    # LED lights (front)
+    draw.ellipse([cx-int(3*s), cy-int(3*s), cx+int(3*s), cy+int(3*s)], fill=led_col)
 
 
 def _make_medical_image(idx):
@@ -367,10 +508,12 @@ def _apply_image_stressor(img, stressor_key, image_domain="general", severity=0.
         arr = arr * 0.40 + 60
         img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
     elif stressor_key == "image_noise":
-        # severity scales noise std: 0.1→std=15, 1.0→std=60
-        noise_std = 15 + s * 45
+        # severity scales noise std: 0.1→std=5, 1.0→std=18
+        # Slight blur after noise makes it look like real sensor noise, not static
+        noise_std = 5 + s * 13
         noise = np.random.normal(0, noise_std, arr.shape)
         img = Image.fromarray(np.clip(arr + noise, 0, 255).astype(np.uint8))
+        img = img.filter(ImageFilter.GaussianBlur(radius=0.8))
     elif stressor_key == "compression_artifact":
         # severity scales JPEG quality: 0.1→quality=50, 1.0→quality=5
         quality = max(5, int(50 - s * 45))
