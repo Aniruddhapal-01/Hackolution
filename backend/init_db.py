@@ -17,7 +17,7 @@ def main():
     init_db()
     print("Done. Tables created:")
     for table in Base.metadata.sorted_tables:
-        print(f"  ✓ {table.name}")
+        print(f"  * {table.name}")
 
 if __name__ == "__main__":
     main()
