@@ -26,7 +26,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
         Pillow==10.3.0 \
         numpy==1.26.4 \
         opencv-python-headless==4.9.0.80 \
-        scipy==1.13.0
+        scipy==1.13.0 \
+        scikit-learn==1.4.2 \
+        joblib==1.4.2 \
+        google-generativeai==0.5.2 \
+        reportlab==4.2.2 \
+        python-docx==1.1.2
 
 RUN pip install --no-cache-dir \
     torch==2.3.0 torchvision==0.18.0 \

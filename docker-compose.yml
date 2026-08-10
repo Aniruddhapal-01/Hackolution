@@ -122,14 +122,14 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-        # Remove the above 'devices' block if no GPU available
+    # Uncomment the block below to enable GPU support (requires NVIDIA Container Toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
   # ── React Frontend ──────────────────────────────────────────────────────────
   frontend:

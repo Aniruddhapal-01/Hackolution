@@ -11,15 +11,15 @@ import shutil
 import time
 
 from celery import Celery
-from models import SessionLocal, Project, ProjectStatus
+from models import SessionLocal, ModelEvaluation, EvaluationStatus
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 def _update_project(project_id: str, **kwargs):
-    """Helper to update project status in local SQLite DB."""
+    """Helper to update evaluation status in local SQLite DB."""
     db = SessionLocal()
     try:
-        project = db.query(Project).filter(Project.id == project_id).first()
+        project = db.query(ModelEvaluation).filter(ModelEvaluation.id == project_id).first()
         if project:
             for key, value in kwargs.items():
                 if hasattr(project, key):
@@ -52,7 +52,7 @@ def train_lora_task(self, project_id: str, seed_image_storage_keys: List[str]):
     from storage import download_file
     from services.lora_trainer import train_lora
 
-    _update_project(project_id, status=ProjectStatus.TRAINING_LORA, current_stage="Downloading seed images", progress=0)
+    _update_project(project_id, status=EvaluationStatus.ANALYZING, current_stage="Downloading seed images", progress=0)
 
     tmpdir = tempfile.mkdtemp()
     local_paths = []
@@ -101,20 +101,21 @@ def full_pipeline_task(self, project_id: str):
     # ─── PIPELINE INITIALIZATION ─────────────────────────────────
     from sqlalchemy.orm import joinedload
     db = SessionLocal()
-    project = db.query(Project).options(joinedload(Project.seed_images)).filter(Project.id == project_id).first()
+    project = db.query(ModelEvaluation).filter(ModelEvaluation.id == project_id).first()
     if not project:
         db.close()
         logger.error(f"[pipeline] Project {project_id} not found")
         return
     
-    seed_images = project.seed_images
+    seed_images = []
     seed_image_paths = []
-    # Ensure we have local paths to the seeds
+    # Ensure we have local paths to the seeds (ModelEvaluation stores seed_image_paths as JSON)
+    import json as _json
     backend_dir = os.path.dirname(os.path.abspath(__file__))
-    for si in seed_images:
-        local_p = os.path.join(backend_dir, "data", si.storage_key)
-        if os.path.exists(local_p):
-            seed_image_paths.append(local_p)
+    stored_paths = _json.loads(project.seed_image_paths) if project.seed_image_paths else []
+    for p in stored_paths:
+        if os.path.exists(p):
+            seed_image_paths.append(p)
 
     vulnerability_vector = project.vulnerability_vector or {
         "occlusion_50": 0.48,
@@ -131,7 +132,7 @@ def full_pipeline_task(self, project_id: str):
     from services.auto_labeler import generate_coco_dataset
     from storage import upload_file, get_presigned_url
 
-    _update_project(project_id, status=ProjectStatus.GENERATING, current_stage="Synthesizing sensory failures", progress=5)
+    _update_project(project_id, status=EvaluationStatus.FETCHING_DATA, current_stage="Synthesizing sensory failures", progress=5)
 
     def gen_progress(pct):
         actual = 5 + int(pct * 0.35)
@@ -180,28 +181,22 @@ def full_pipeline_task(self, project_id: str):
     upload_file(zip_path, storage_key, content_type="application/zip")
     dataset_url = get_presigned_url(storage_key)
     
-    # Record generated images in DB for analytics and export features
-    from models import GeneratedImage
+    # Record generated images in DB for analytics (using DatasetRecord since GeneratedImage no longer exists)
+    from models import DatasetRecord
     db = SessionLocal()
     try:
-        # Clear existing generations for this project
-        db.query(GeneratedImage).filter(GeneratedImage.project_id == project_id).delete()
-        
         for fpath, stressor_key in refined_pairs:
-            # Full relative path for the frontend media server
             rel_path = f"generated/{project_id}/raw/{os.path.basename(fpath)}"
-            
-            # Generate a mock confidence score based on the stressor severity
-            conf = 0.5 + (0.4 - 0.1 * len(stressor_key)) # pseudo-random low confidence
-            conf = max(0.1, min(0.65, conf)) 
-            
-            gen = GeneratedImage(
-                project_id=project_id,
-                stressor=stressor_key,
+            conf = 0.5 + (0.4 - 0.1 * len(stressor_key))
+            conf = max(0.1, min(0.65, conf))
+            record = DatasetRecord(
+                evaluation_id=project_id,
+                source="synthetic",
+                dataset_name=stressor_key,
                 storage_key=rel_path,
-                confidence_score=conf
+                target_stressor=stressor_key,
             )
-            db.add(gen)
+            db.add(record)
         db.commit()
     except Exception as e:
         logger.error(f"Failed to sync generations to DB: {e}")
@@ -210,7 +205,7 @@ def full_pipeline_task(self, project_id: str):
 
     _update_project(
         project_id,
-        status=ProjectStatus.READY,
+        status=EvaluationStatus.READY,
         current_stage="Simulation Ready",
         progress=100,
         dataset_url=dataset_url,
