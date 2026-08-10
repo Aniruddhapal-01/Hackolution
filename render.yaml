@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: blindspot-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: MOCK_ML
+        value: "true"
+      - key: IMAGES_PER_STRESSOR
+        value: "8"
+      - key: USE_BLENDER
+        value: "false"
+      - key: DATABASE_URL
+        sync: false   # set manually in Render dashboard
+      - key: REDIS_URL
+        sync: false   # set manually in Render dashboard
