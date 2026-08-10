@@ -9,6 +9,8 @@
 
 ---
 
+Live Link - https://blindspotai.vercel.app/
+
 ## What is BlindSpot.AI?
 
 BlindSpot.AI is a full-stack platform that automatically evaluates the robustness of any trained ML model. You upload a model file, describe it, and the platform:
