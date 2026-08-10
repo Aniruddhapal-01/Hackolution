@@ -13,21 +13,19 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blindspot}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Port not exposed publicly — only reachable inside blindspot_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U blindspot"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-blindspot}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ── Redis (Celery broker) ───────────────────────────────────────────────────
+  # ── Redis ───────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: blindspot_redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # Port not exposed publicly — only reachable inside blindspot_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -46,8 +44,7 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"    # S3 API
-      - "9001:9001"    # MinIO Console (browser UI)
+      - "9001:9001"    # MinIO Console — restrict with firewall in production
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -76,7 +73,7 @@ services:
     volumes:
       - weights_data:/app/weights
       - generated_data:/app/generated
-      - ./backend:/app   # hot-reload in dev
+      # - ./backend:/app   # dev only — do NOT enable in production
     ports:
       - "8000:8000"
     healthcheck:
@@ -114,7 +111,7 @@ services:
     volumes:
       - weights_data:/app/weights
       - generated_data:/app/generated
-      - ./backend:/app
+      # - ./backend:/app   # dev only — do NOT enable in production
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,7 +119,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    # Uncomment the block below to enable GPU support (requires NVIDIA Container Toolkit):
+    # Uncomment to enable GPU support (requires NVIDIA Container Toolkit on the host):
     # deploy:
     #   resources:
     #     reservations:
@@ -136,14 +133,15 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Baked into the React bundle at build time — set to your public domain/IP
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8000}
     container_name: blindspot_frontend
     restart: unless-stopped
     ports:
       - "3000:80"
     depends_on:
       - api
-    environment:
-      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8000}
 
 volumes:
   postgres_data:

@@ -2,6 +2,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Accept build-time API URL (passed from docker-compose build args)
+ARG REACT_APP_API_URL=http://localhost:8000
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
+
 COPY package.json ./
 RUN npm install --legacy-peer-deps
 
